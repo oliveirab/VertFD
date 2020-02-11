@@ -1,0 +1,826 @@
+---
+title: "FD project (amphibians)"
+author: "Brunno F Oliveira^1^; Brett R Scheffers^2^;"
+date: "May 9, 2017 **1** Department of Wildlife Ecology and Conservation, University of Florida/IFAS, Gainesville, FL 32611, USA. **Corresponding author:** (brunno.oliveira@me.com)"
+output:
+  pdf_document: default
+theme: united
+toc: yes
+---
+
+*** 
+
+\newpage
+
+
+
+# Packages versions:
+```{r info,message=FALSE, echo=F}
+info <- sessionInfo()
+```
+
+We used `r info[1]$R$ver` and the following packages:
+
+```{r packages, echo=FALSE, message=FALSE, warning=FALSE, include=T}
+rm(list=ls())
+gc()
+
+list.of.packages <- c("picante","ape","raster","maptools","rgeos","stringr","rgdal","ggplot2","plyr","grid","gridExtra","multcompView","caper","geiger","phytools","knitr","maps","parallel","doParallel","apTreeshape","data.table","ppcor","hier.part", "relaimpo","FD","knitr","PhyloMeasures","PerformanceAnalytics","pbapply", "dplyr")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+sapply(list.of.packages, require, character.only = TRUE)
+```
+
+
+```{r "setup"}
+
+savedatafolder <- "C:/Users/boliveir/Dropbox (UFL)/FD_causes/" # address to folder to save results
+externHD <- 'G:/GIS/' # address to external HD
+setwd("C:/Users/boliveir/Dropbox (UFL)/FD_causes")
+knitr::opts_knit$set(root.dir = "C:/Users/boliveir/Dropbox (UFL)/FD_causes")
+
+
+# function to cal MPD for a list of species
+# cophe_phyd = cophenetic distance matrix
+# splist= sp list
+mpd_b <- function(cophe_phyd, splist){
+  dist_trx <- cophe_phyd[splist, splist]
+  MPD_ <- mean(dist_trx[lower.tri(dist_trx)])
+  return(MPD_)
+}
+
+# load function to calculate fdips in the loop
+source("fdisp_loop.R")
+
+```
+
+## Land data
+```{r , echo=F}
+land <- rgdal::readOGR("G:/GIS/Shp files/ne_50m_land/ne_50m_land_no_artic.shp")
+crs(land) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+land <- spTransform(land, CRS("+proj=cea +datum=WGS84"))
+
+  
+# REFERENCE PROJECTION MAP
+mapa <- raster(xmn = -20592508, xmx = 20588492, ymn = -5743602, ymx = 6573398,
+              crs = CRS("+proj=cea +datum=WGS84"))
+res(mapa) <- 111000
+```
+
+# Load species pres/abs:
+## Species occurrences
+```{r species occr, eval=T, message=TRUE}
+# Are you running the code for the first time?
+
+answer <- "yes"
+
+if(answer=="no"){
+  load(paste(savedatafolder,"code/amphibians",'_data.RData',sep=""))
+  #load(paste(savedatafolder,"code/amphibians",'_data_cluster.RData',sep=""))
+}
+if(answer=="yes"){
+  
+  occr <- read.csv(paste(savedatafolder,"Data/amphibians_occr_equal_area_30land.csv",sep=""))
+  XY <- occr[,1:2]
+  names(XY) <- c("x","y")
+  coordinates(XY)<-~x+y
+  occr <- occr[,-1:-2]
+  amph_sp_list <- colnames(occr)
+  if(anyDuplicated(amph_sp_list)>0){
+    occr <- occr[,-which(duplicated(amph_sp_list))]
+  }
+  
+  # Check
+  #Species richness
+  {test <- data.frame(XY,rowSums(occr)) 
+    colnames(test)[1:2] <- c("x","y")
+    coordinates(test) <- ~x+y
+    gridded(test) <- TRUE
+    test <- raster(test)}
+  {plot(main="Richness", test)
+    map(land,add=T,cex=.5)}
+  
+  spp <- colnames(occr)
+  spp <- data.frame(gsub("[.]","_",spp))
+  names(spp) <- "sp"
+}
+
+colnames(occr) <- spp$sp
+```
+
+The original species occurrence dataset has `r nrow(spp)` species
+
+## Traits
+Using AmphiBIO
+Oliveira, B.F., S?o-Pedro, V.A., Santos-Barrera, G., Penone, C., & Costa, G.C. (2017) AmphiBIO, a global database for amphibian ecological traits. Scientific Data, 4, 170123. 
+```{r open_traits, eval=F}
+trait <- data.frame(read.csv(paste(sep="",savedatafolder,"Data/AmphiBIO_v1_imputed.csv"), header=TRUE))
+trait_sps_IUCN <- read.csv(paste(savedatafolder,"Data/trait_sps_IUCN.csv",sep = ""))
+
+trait$Species <- trait_sps_IUCN$IUCNname
+
+trait <- trait[!duplicated(trait$Species),] # remove duplicated species
+rownames(trait) <- trait$Species
+
+traitdata <- as.vector(trait$Species)
+
+for(i in 1:length(traitdata)){ # Fix names
+  #cat("\r",i,"of", length(traitdata))
+  if(str_sub(traitdata[i], start= -1) == "_"){ # check is species names ends with '_'
+    traitdata[i] <- gsub('.{1}$', '', traitdata[i]) # remove '_' when species names ends with
+  }
+    if(str_sub(traitdata[i], start= -2) == ".1"){ # check is species names ends with '.1'
+    traitdata[i] <- gsub('.1', '', traitdata[i]) # remove '.1' when species names ends with
+  }
+  else{
+    traitdata[i] <- traitdata[i]
+  }
+}
+
+traitdata <- data.frame(traitdata)
+
+traitdata <- gsub(" ","_",traitdata[,1])
+
+trait$Species <- traitdata
+
+rownames(trait) <- traitdata
+
+traitdata <- data.frame(traitdata)
+
+trait <- trait[,3:11]
+trait$Body_size_mm <- scale(log(trait$Body_size_mm))
+trait$Reproductive_output_y <- scale(log(trait$Reproductive_output_y))
+
+```
+
+The original trait dataset has `r nrow(trait)` species.  
+
+## Phylogeny
+Using Jetz and Pyron 2017
+```{r open_traits, eval=F}
+### OPEN LARGE DATASET
+tre <- read.tree(paste(sep="",savedatafolder,"Data/amphibian_Pyron_tree_new.txt"))
+tredata <- data.frame(tre$tip.label)
+```
+The original tree has `r nrow(tredata)` species.  
+
+
+
+## Get species in common among the three datasets
+```{r count_traits, eval=F}
+names(spp)<-names(tredata)<-names(traitdata) <- "sps"
+
+lista1 <- merge(spp,tredata,by=intersect(names(spp), names(tredata)))
+lista2 <- merge(lista1,traitdata,by=intersect(names(lista1), names(traitdata))) # This is the list of species belonging to all three datasets
+lista <-as.vector(lista2[,1])
+
+rm(lista1,lista2)
+```
+
+There are `r length(lista)` species in common between the three datasets (`(length(lista)*100)/nrow(spp)`% of all species present in the IUCN dataset). We use this species' list to subset the original species and trait data. This dataset will be used in the following analyses.
+
+## Subseting species from datasets
+```{r eval=F}
+# 1 - DISTRIBUTIONAL DATA
+occr <- occr[, colnames(occr) %in% lista] # Subset the species beloguing to both datasets
+Rich <- rowSums(occr) # Get richness for every cell
+
+# subset communities with less than 4 species
+rem <- which(Rich < 4)
+occr <- occr[-rem,]
+Rich <- Rich[-rem]
+XY <- as.data.frame(XY)[-rem,]
+occr <- occr[,-which(colSums(occr)==0)] # Remove species that does not occur in any community
+# new list of species
+lista <- colnames(occr)
+
+gc() # free up more memmory
+
+# 2 - PHYLOGENY
+phylo_nqro <- drop.tip(tre,lista) #Remove as espécies que quero e ficam as que não quero
+tip_nqro<-as.vector(phylo_nqro$tip.label) #Lista das sps que nao quero
+tre<-drop.tip(tre, tip_nqro) #Eliminar as sp que nao quero e ficam as que quero
+
+rm(tip_nqro,phylo_nqro)
+
+# 3 - TRAIT DATA
+trait <- trait[rownames(trait) %in% lista,]
+
+# 4 - REARRANGE DATA
+# The species data in the data frames containing the distribution and trait measurements 
+# must be in the same row order as the names of the species in the tree object (mytree$tip.label). 
+occr <- occr[,match(tre$tip.label,colnames(occr))]
+trait <- trait[match(tre$tip.label,rownames(trait)),]
+# check whether our community, tree and traits are in the same order.
+all.equal(colnames(occr), tre$tip.label)
+all.equal(colnames(occr), rownames(trait))
+
+rm(traitdata,tredata,spp)
+
+gc() # free up more memmory
+```
+After removing communities with less than 4 species, our final data contained `r length(lista)` species.
+
+#Load environmental variables 
+```{r}
+# create raster with the same extent of `Richness_Raster` (~1 degree)
+r <- mapa
+
+res(r)
+```
+
+## Climate change velocity (Sandel et al. 2011)
+Downloaded from [Dryad](http://datadryad.org/resource/doi:10.5061/dryad.b13j1).
+Citation: Sandel, B. et al. (2011) The influence of Late Quaternary climate-change velocity on species endemism. Science.
+```{r get_velocity, eval=F}
+velo.r <- raster(paste(sep="",externHD,'#Environment/climate_velocity/Velocity.tif'))
+velo.r <- projectRaster(velo.r, crs=crs(mapa))
+
+velo.r <- resample(velo.r, r, method= "bilinear")
+velocity <- extract(velo.r,XY,method='simple')
+
+rm(velo.r)
+```
+
+## Climate variance over time (Hannah)
+```{r get_velocity, eval=F}
+# Stability over time metric
+climate.stab.r <- raster(paste(sep="",externHD,'#Environment/Climate_Stability_Hannah_Owens/climateStability.asc'))
+crs(climate.stab.r) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+climate.stab.r <- projectRaster(climate.stab.r, crs=crs(mapa))
+
+climate.stab.r <- resample(climate.stab.r, r, method= "bilinear")
+climate.stab <- extract(climate.stab.r,XY,method='simple')
+
+rm(climate.stab.r)
+```
+
+## Climate distance and novelty (Fitzpatrick et al. 2018)
+Citation: Fitzpatrick et al. (2018) How will climate novelty influence ecological forecasts? Using the Quaternary to assess future reliability. Glob. Change Bio.
+```{r get_clim_dist, eval=F}
+# Temperature distance
+tempdist.r <- raster(paste(sep="",externHD,'#Environment/Climate_distance_novelty/climate_distance/climate_distance_pairwiseavg_halfdegree.temp.tif'))
+tempdist.r <- projectRaster(tempdist.r, crs=crs(mapa))
+
+tempdist.r <- resample(tempdist.r, r, method= "bilinear")
+tempdist <- extract(tempdist.r,XY,method='simple')
+
+rm(tempdist.r)
+
+# Precip distance
+precipdist.r <- raster(paste(sep="",externHD,'#Environment/Climate_distance_novelty/climate_distance/climate_distance_pairwiseavg_halfdegree.precip.tif'))
+precipdist.r <- projectRaster(precipdist.r, crs=crs(mapa))
+
+precipdist.r <- resample(precipdist.r, r, method= "bilinear")
+precipdist <- extract(precipdist.r,XY,method='simple')
+
+rm(precipdist.r)
+
+# Temperature novelty
+tempnov.r <- raster(paste(sep="",externHD,'#Environment/Climate_distance_novelty/climate_novelty/climate_novelty_pairwiseavg_halfdegree.temp.tif'))
+tempnov.r <- projectRaster(tempnov.r, crs=crs(mapa))
+
+tempnov.r <- resample(tempnov.r, r, method= "bilinear")
+tempnov <- extract(tempnov.r,XY,method='simple')
+
+rm(tempnov.r)
+
+# Precip novelty
+precipnov.r <- raster(paste(sep="",externHD,'#Environment/Climate_distance_novelty/climate_novelty/climate_novelty_pairwiseavg_halfdegree.precip.tif'))
+precipnov.r <- projectRaster(precipnov.r, crs=crs(mapa))
+
+precipnov.r <- resample(precipnov.r, r, method= "bilinear")
+precipnov <- extract(precipnov.r,XY,method='simple')
+
+rm(precipnov.r)
+
+```
+
+## Canopy height and biomass at 1km spatial resolution.
+Downloaded from [NASA](http://lidarradar.jpl.nasa.gov/).  
+Citation: Simard, M. et al. (2011), "Mapping forest canopy height globally with spaceborne lidar", Journal of Geophysical Research, VOL. 116, G04021. 
+```{r get_tree_heigh, eval=F}
+veg.r <- raster(paste(sep="",externHD,'#Environment/NASA veg height/asc/veg-height_1dg-equal.asc'))
+
+veg <- extract(veg.r,XY,method='simple')
+
+rm(veg.r)
+```
+
+## Current climate conditions (Hijmans et al. 2005)  
+Downloaded from [Worldclim project](http://www.worldclim.org) at the resolution of 10 minutes of a degree ~ 1 degree
+Citation: Hijmans, R.J., et al. (2005) Very high resolution interpolated climate surfaces for global land areas. International Journal of Climatology
+```{r get_current_climate, eval=F}
+bio <- raster::getData("worldclim", var = "bio", res = 10)
+bio <- projectRaster(bio, crs=crs(mapa))
+  
+mean.temp.r <- resample(bio$bio1,r, method= "bilinear") # Annual mean temperature
+max.temp.r <-  resample(bio$bio5,r, method= "bilinear") # Max Temperature of Warmest Month
+min.temp.r <-  resample(bio$bio6,r, method= "bilinear") # Min Temperature of Warmest Month
+sea.temp.r <- resample(bio$bio4,r, method= "bilinear") # temperature seasonality
+diu.temp.r <- resample(bio$bio2,r, method= "bilinear") # diurnal temperature range
+
+mean.temp <- extract(mean.temp.r,XY,method='simple')
+max.temp <- extract(max.temp.r,XY,method='simple')
+min.temp <- extract(min.temp.r,XY,method='simple')
+sea.temp <- extract(sea.temp.r,XY,method='simple')
+diu.temp <- extract(diu.temp.r,XY,method='simple')
+
+mean.prec.r <- resample(bio$bio12,r, method= "bilinear") # Annual preciptation
+sea.prec.r <- resample(bio$bio15,r, method= "bilinear") # Precipitation seasonality
+
+mean.prec <- extract(mean.prec.r,XY,method='simple')
+sea.prec <- extract(sea.prec.r,XY,method='simple')
+
+rm(bio, mean.temp.r,max.temp.r,min.temp.r,sea.temp.r,diu.temp.r,
+   mean.prec.r,sea.prec.r)
+```
+
+
+## NPP
+Downloaded from [NASA](https://lpdaac.usgs.gov/dataset_discovery/modis/modis_products_table/mod17a3)
+Citation: Running, S. W. et al. 2004. A Continuous Satellite-Derived Measure of Global Terrestrial Primary Production. - Bioscience 54: 547-560.
+
+Valid range of values is 0-65500. Values > 65500 represent other categories of land
+see https://lpdaac.usgs.gov/dataset_discovery/modis/modis_products_table/mod17a3
+I found that there are much cells with values bellow 65500 that are unlikely to be correct values. For instance, see Fig 2 in S?mov?, I. & Storch, D. (2017) The enigma of terrestrial primary productivity: measurements, models, scales and the diversity-productivity relationship. Ecography, 40, 239-252. Here, the max NPP value is around 2000. Thus, I modified the original NPP raster by 1) giving NA to cells > 65500, and then 2) giving 0 to cells > 30000.
+
+```{r get_tree_heigh, eval=F}
+# productivity
+NPP <- raster(paste(sep="",externHD,'#Environment/NPP_GPP_means_2000_2012/MOD17A3_Science_NPP_mean_00_12_equal-area_NULL_30000.tif'))
+
+NPP <- extract(NPP,XY,method='simple')
+```
+
+
+## Evelation data at 1 degree.
+Downloaded from [Worldclim project](http://www.worldclim.org) at the resolution of 10 minutes of a degree ~ 1 degree. Aggregated from SRTM 90 m resolution
+```{r get_elevation, eval=F}
+#  topographic indeces 
+elevation <- raster::getData('worldclim', var='alt', res = 2.5)
+elevation <- projectRaster(elevation, crs=crs(mapa))
+elev <- extract(elevation,XY,method='simple')
+
+terrain_indices <- terrain(elevation, 
+                           opt=c('slope','aspect', 'TPI', 'TRI', 'roughness'))
+terrain_indices <- extract(terrain_indices,XY,method='simple')
+
+terrain_indices <- data.frame(elev, terrain_indices)
+
+rm(elevation)
+```
+
+
+## Realms
+```{r get_realm, warning= F, eval=F}
+Reanames <- readShapePoly("G:/GIS/CMEC regions & realms/newRealms.shp")
+  crs(Reanames) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+  extent(mapa) <- extent(Reanames)
+  Reanames<-data.frame(Reanames$Realm)
+  names(Reanames)<-'Realm'
+  Reanames<-cbind(Realms=rownames(Reanames),Reanames)
+  #2) Extract values
+  Realm <- readShapePoly("G:/GIS/CMEC regions & realms/newRealms.shp")
+  crs(Realm) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+  realmnames<-sort(Realm$fullupgmar) # put alphabetic order because rasterize will put number in acordance with alphabetic order
+  extent(mapa) <- extent(Realm)
+  Realm <- rasterize(Realm,mapa,'fullupgmar')
+  Realm <- projectRaster(Realm, crs="+proj=cea +datum=WGS84")
+  Realm <- as.vector(raster::extract(Realm,XY,method='simple'))
+  
+  #Some cells comprise more than one Realm and the extract function give a medium value for that cell. 
+  #This value have no meaning as we need the value of the Realm for each cell.
+  check.integer <- function(N){ # function for check if number is integer
+    !length(grep("[^[:digit:]]", as.character(N)))
+  }
+  
+  for (i in seq_along(Realm)){ # put NA in non-integer numbers
+    if (check.integer(Realm[i]))
+    {Realm[i]<-Realm[i]
+    }else{Realm[i]<-NA}
+  }
+  
+  #Dont know why...but some codes come with whitespaces -To see use: unique(Realm)
+  trim <- function( x ) { #Function to remove whitespaces
+    gsub("(^[[:space:]]+|[[:space:]]+$)", "", x)
+  }
+  Realm<-trim(Realm)
+  
+  #Give names for Realm code...
+  Realm <- as.character(Reanames$Realm)[ match(Realm, c(1:11))]
+  
+  ### Solve problem with NAs between realms
+  Realm2 <- readShapePoly("G:/GIS/CMEC regions & realms/newRealms.shp")
+  crs(Realm2) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+  Realm2 <- spTransform(Realm2, CRS("+proj=cea +datum=WGS84"))
+  XY <- SpatialPoints(XY)
+  crs(XY) <-"+proj=cea +datum=WGS84"
+  Realm2<-sp::over(XY,Realm2)
+  Realm2<-as.vector(Realm2$Realm)
+  
+  #Give names for NAs based on the previous 
+  Realm3<-NA
+  for(i in 1:length(Realm2)){
+    if(is.na(Realm[i])){
+      Realm3[i]<-Realm2[i]
+    }else{
+      Realm3[i]<-Realm[i]
+    } 
+  }
+  
+  Realm<-Realm3
+  rm(Realm2,Realm3)
+```
+
+## WWF Biomes
+```{r biomes}
+biome <- readShapePoly(paste(sep="",externHD,"WWF_biomas_ecoregions/wwf_terr_ecos.shp"))
+crs(biome) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+biome <- spTransform(biome, crs(r))
+biome <- rasterize(biome,r,'BIOME')
+biome <- as.vector(extract(biome,XY,method='simple',fun=min(x)))
+
+biome<-gdata::trim(biome)
+biome<-round(as.numeric(biome),0)
+biome[which(biome>14)] <- NA
+
+# biomes names
+bionames <- c(
+"Tropical & Subtropical Moist Broadleaf Forests",
+"Tropical & Subtropical Dry Broadleaf Forests", 
+"Tropical & Subtropical Coniferous Forests",
+"Temperate Broadleaf & Mixed Forests",
+"Temperate Conifer Forests",
+"Boreal Forests/Taiga",
+"Tropical & Subtropical Grasslands, Savannas & Shrublands",
+"Temperate Grasslands, Savannas & Shrublands",
+"Flooded Grasslands & Savannas",
+"Montane Grasslands & Shrublands",
+"Tundra",
+"Mediterranean Forests, Woodlands & Scrub",
+"Deserts & Xeric Shrublands",
+"Mangroves")
+```
+
+## Biorealm
+```{r get_tree_density}
+Biorealm <- paste(Realm, biome,sep = "_")
+```
+
+
+## Environmental variables
+```{r env_vars}
+env.vars <- data.frame(velocity,climate.stab,tempnov,tempdist,veg,
+                       mean.temp,mean.prec,elev,terrain_indices,
+                       NPP,Realm,Biorealm,biome)
+```
+
+# COMMUNITY METRICS
+```{r community_metrics, eval=F, message=FALSE}
+trc <- read.tree(paste(sep="",savedatafolder,"Data/amphibian_Pyron_tree_new.txt"))
+
+# Get evolutionary distinctiveness (fair proportion)
+spp.ED <- evol.distinct(trc, type = c("fair.proportion"), ### Species' evolutionary distinctiveness
+                               scale = FALSE, use.branch.lengths = TRUE)
+
+# Get evolutionary distinctiveness (equal splits)
+spp.ED_eq <- evol.distinct(trc, type = c("equal.splits"), ### Species' evolutionary distinctiveness
+                               scale = FALSE, use.branch.lengths = TRUE)
+
+Ncell <- nrow(occr)
+
+cophe_tre <- cophenetic(tre)
+
+bt<-branching.times(tre)
+
+com_metrics <-
+  pblapply(1:nrow(occr), FUN = function(x){
+  
+  tipnames <- which(occr[x,]==1) # species that occur in the cell i
+  tipnames <- names(occr)[tipnames]
+
+  trx <- drop.tip(tre, tre$tip.label[-which(tre$tip.label%in%tipnames)]) ### construct tree of all species within a cell
+
+  subED<-subset(spp.ED, Species%in%tipnames)
+  
+  subED_eq<-subset(spp.ED_eq, Species%in%tipnames)
+  
+  SPD <- length(trx$tip.label) ### cell richness
+  
+  # Diversification rates as in Jetz et al.2012 (fair proportion)
+  DIV <- mean(1/subED[,2]) 
+  
+  # Diversification rates as in Jetz et al.2012 (equal splits)
+  DIV_eq <- mean(1/subED_eq[,2]) 
+	
+  # Diversification rates as in  Magallon & Sanderson 2001
+  # Here using crown-group age
+  DIV2 <- log(SPD)/(max(branching.times(trx))) 
+  
+  # Diversification rates as in  Magallon & Sanderson 2001
+  # here using stem-group age
+  foocrown<-findMRCA(tre, tipnames)
+  stemnodemulti <- tre$edge[,1][tre$edge[,2]==foocrown]
+  if(length(stemnodemulti)==0){
+    stemage <- max(branching.times(trx))
+  }
+  else{
+    stemage <- bt[names(bt)==stemnodemulti]
+  }
+	DIV3 <- log(SPD)/stemage 
+  
+	### AGE
+	# Crown-group age
+	AGE <- max(branching.times(trx))
+	# Stem-group age
+	AGE2 <- stemage
+	# max clade age
+	clades_ <- getCladesofSize(trx, clade.size=2)
+	AGE3 <- max(unlist(lapply(clades_, function(x) max(branching.times(x)))))
+	# mean clade age
+	clades_ <- getCladesofSize(trx, clade.size=2)
+	AGE4 <- mean(unlist(lapply(clades_, function(x) max(branching.times(x)))))
+	
+  ### clade rich
+  clades <- length(clades_) 
+  
+  # calc MPD
+  # this is just for testing whether this MPD calculated by hand is equal to the one calculated using the picante library
+  # for test use plo(MPD_, MPD)
+  MPD_ <- mpd_b(cophe_tre, tipnames)
+  
+ return(data.frame(SPD,DIV,DIV_eq,DIV2,DIV3,
+                    AGE,AGE2,AGE3,AGE4,
+                    clades,MPD_))
+})
+com_metrics <- bind_rows(com_metrics)
+
+```
+
+# COMMUNITY METRICS SES
+```{r community_metrics, eval=F, message=FALSE}
+
+ses_MPD_realm<-ses_MPD_biome<-ses_MPD_biorealm<-rep(NA,Ncell)
+
+for (i in 1:Ncell){
+  cat("\r",i,"of", Ncell)
+  
+  # SES MPD Realm
+  # we will be using the "richness" null model algorithm
+  # the "independentswap" is more complicated
+  if(is.na(Realm[i])){
+  ses_MPD_realm[i] <- NA
+  } 
+  else {
+    Realm.cells <- as.numeric(which(Realm==Realm[i])) # cells in the realm
+    occ.temp <- occr[Realm.cells,] # realm subset
+    sps.in.realm <- which(colSums(occ.temp)>0) # species that occur in the realm
+    sps.in.realm <- names(occr)[sps.in.realm]
+    
+    # randomly select from the total pool of species in the realm [sps.in.realm] the same number of species observed in that cell.
+    null.vals <- replicate(100, 
+                           mpd_b(cophe_tre, 
+                                 sample(sps.in.realm,com_metrics$SPD[i])))
+    ses_MPD_realm[i] <- (com_metrics$MPD_[i] - mean(null.vals))/sd(null.vals)
+  }
+  
+  # SES MPD Biorealm
+  # we will be using the "richness" null model algorithm
+  # the "independentswap" is more complicated
+  if(is.na(Biorealm[i])){
+  ses_MPD_biorealm[i] <- NA
+  } 
+  else {
+    Biorealm.cells <- as.numeric(which(Biorealm==Biorealm[i])) # cells in the Biorealm
+    occ.temp <- occr[Biorealm.cells,] # Biorealm subset
+    sps.in.Biorealm <- which(colSums(occ.temp)>0) # species that occur in the Biorealm
+    sps.in.Biorealm <- names(occr)[sps.in.Biorealm]
+    
+    # randomly select from the total pool of species in the Biorealm [sps.in.Biorealm] the same number of species observed in that cell.
+    null.vals <- replicate(100, 
+                           mpd_b(cophe_tre,
+                                 sample(sps.in.Biorealm,com_metrics$SPD[i])))
+    ses_MPD_biorealm[i] <- (com_metrics$MPD_[i] - mean(null.vals))/sd(null.vals)
+  }
+  
+  # SES MPD biome
+  # we will be using the "richness" null model algorithm
+  # the "independentswap" is more complicated
+  if(is.na(biome[i])){
+  ses_MPD_biome[i] <- NA
+  } 
+  else {
+    biome.cells <- as.numeric(which(biome==biome[i])) # cells in the biome
+    occ.temp <- occr[biome.cells,] # biome subset
+    sps.in.biome <- which(colSums(occ.temp)>0) # species that occur in the biome
+    sps.in.biome <- names(occr)[sps.in.biome]
+    
+    # randomly select from the total pool of species in the biome [sps.in.biome] the same number of species observed in that cell.
+    null.vals <- replicate(100, 
+                           mpd_b(cophe_tre, 
+                                 sample(sps.in.biome, com_metrics$SPD[i])))
+    ses_MPD_biome[i] <- (com_metrics$MPD_[i] - mean(null.vals))/sd(null.vals)
+  }
+}
+
+# we calculated MPDses using to the global species pool in order to get a metric that represents the community age relative to all species, not only those occurring at the regional species pool.
+COM1 <- ses.mpd (occr, cophenetic(tre), null.model = "richness", runs=99, iterations=100)
+MPD  <- COM1[,"mpd.obs"]
+ses.MPD <- COM1[,"mpd.obs.z"]
+
+COM2 <- ses.mpd (occr, cophenetic(tre), null.model = "independentswap", runs=99, iterations=100)
+MPD2  <- COM2[,"mpd.obs"]
+ses.MPD2 <- COM2[,"mpd.obs.z"]
+
+
+com_metrics_ses <- data.frame(ses.MPD,ses.MPD2,
+                              ses_MPD_realm,ses_MPD_biome,ses_MPD_biorealm)
+
+
+gc()
+
+
+```
+
+# Functional diversity
+```{r}
+# Make a file with Nominal Variables
+tabN <- data.frame(apply(trait[,c(1:4,7:9)], 2, as.factor))
+# Now with the quantitative Variables
+tabQ <- data.frame(trait[,c(5,6)])
+rownames(tabQ) <- rownames(trait)
+rownames(tabN) <- rownames(trait)
+
+ktab1  <- ktab.list.df(list(tabN,tabQ))
+TraitDis <- dist.ktab(ktab1 , c("N", "Q"), c("scaledBYrange"))
+
+#FD <-dbFD(TraitDis, occr)
+
+FD <- fdisp(TraitDis, as.matrix(occr))
+
+str(FD)
+
+# ## Calculate ses.FD
+# ncores <- detectCores()
+# cl <- makeCluster(ncores)
+# registerDoParallel(cl)
+# 
+# obs.null.output <- foreach(i=1:100, .combine='cbind', .packages=c('FD','picante')) %dopar% { 
+#   fdisp(TraitDis, randomizeMatrix(occr, null.model = "independentswap"))$FDis
+# }
+# # stop the cluster
+# stopCluster(cl)
+# 
+# obs.null.output <- data.frame(obs.null.output)
+# 
+# ses.FD <- NA
+# for(i in 1:Ncell){ cat("\r", i, 'from', dim(occr)[1])
+#   ses.FD[i] <- (FD$FDis[i] - mean(as.numeric(obs.null.output[i,])))/sd(as.numeric(obs.null.output[i,]))
+# }
+
+###############
+## Calculate ses.FD 
+fdis_prepared <- fdis_prep(TraitDis, as.matrix(occr))
+
+# Using Realms as species pools
+
+## Calculate ses.FD Realm
+ncores <- detectCores()
+cl <- makeCluster(ncores)
+registerDoParallel(cl)
+
+FD.Realm.random <- foreach(i=1:Ncell, .combine='cbind', .packages=c('FD')) %dopar% { 
+  # SES FDis
+  # we will be using the "richness" null model algorithm
+  # the "independentswap" is more complicated
+  if(is.na(Realm[i])){
+  c(rep(NA,100))
+  } 
+  else {
+    Realm.cells <- as.numeric(which(Realm==Realm[i])) # cells in the realm
+    occ.temp <- occr[Realm.cells,] # realm subset
+    sps.in.realm <- which(colSums(occ.temp)>0) # species that occur in the realm
+    sps.in.realm <- names(occr)[sps.in.realm]
+    
+    # randomly select from the total pool of species in the realm [sps.in.realm] the same number of species observed in that cell.
+    null.vals <- replicate(100, 
+                           tryCatch(
+                             fdis_calc(fdis_prepared,
+                                       sample(sps.in.realm,com_metrics$SPD[i]))$FDis,
+                             error=function(err) NA))
+    null.vals
+  }
+}
+# stop the cluster
+stopCluster(cl)
+
+ses.FD.realm <- NA
+for(i in 1:Ncell){ cat("\r", i, 'from', dim(occr)[1])
+  ses.FD.realm[i] <- (FD$FDis[i] -
+                        mean(as.numeric(na.omit(FD.Realm.random[,i])))/
+    sd(as.numeric(na.omit(FD.Realm.random[,i]))))
+}
+
+# Using Biorealms as species pools
+
+## Calculate ses.FD Biorealm
+ncores <- detectCores()
+cl <- makeCluster(ncores)
+registerDoParallel(cl)
+
+FD.Biorealm.random <- foreach(i=1:Ncell, .combine='cbind', .packages=c('FD')) %dopar% { 
+  # SES FDis
+  # we will be using the "richness" null model algorithm
+  # the "independentswap" is more complicated
+  if(is.na(Biorealm[i])){
+  c(rep(NA,100))
+  } 
+  else {
+    Biorealm.cells <- as.numeric(which(Biorealm==Biorealm[i])) # cells in the Biorealm
+    occ.temp <- occr[Biorealm.cells,] # Biorealm subset
+    sps.in.Biorealm <- which(colSums(occ.temp)>0) # species that occur in the Biorealm
+    sps.in.Biorealm <- names(occr)[sps.in.Biorealm]
+    
+    # randomly select from the total pool of species in the Biorealm [sps.in.Biorealm] the same number of species observed in that cell.
+    null.vals <- replicate(100, 
+                           tryCatch(
+                             fdis_calc(fdis_prepared,
+                                       sample(sps.in.Biorealm,com_metrics$SPD[i]))$FDis,
+                             error=function(err) NA))
+    null.vals
+  }
+}
+# stop the cluster
+stopCluster(cl)
+
+ses.FD.biorealm <- NA
+for(i in 1:Ncell){ cat("\r", i, 'from', dim(occr)[1])
+  ses.FD.biorealm[i] <- (FD$FDis[i] -
+                        mean(as.numeric(na.omit(FD.Biorealm.random[,i])))/
+    sd(as.numeric(na.omit(FD.Biorealm.random[,i]))))
+}
+
+# Using biomes as species pools
+
+## Calculate ses.FD biome
+ncores <- detectCores()
+cl <- makeCluster(ncores)
+registerDoParallel(cl)
+
+FD.biome.random <- foreach(i=1:Ncell, .combine='cbind', .packages=c('FD')) %dopar% { 
+  # SES FDis
+  # we will be using the "richness" null model algorithm
+  # the "independentswap" is more complicated
+  if(is.na(biome[i])){
+  c(rep(NA,100))
+  } 
+  else {
+    biome.cells <- as.numeric(which(biome==biome[i])) # cells in the biome
+    occ.temp <- occr[biome.cells,] # biome subset
+    sps.in.biome <- which(colSums(occ.temp)>0) # species that occur in the biome
+    sps.in.biome <- names(occr)[sps.in.biome]
+    
+    # randomly select from the total pool of species in the biome [sps.in.biome] the same number of species observed in that cell.
+    null.vals <- replicate(100, 
+                           tryCatch(
+                             fdis_calc(fdis_prepared,
+                                       sample(sps.in.biome,com_metrics$SPD[i]))$FDis,
+                             error=function(err) NA))
+    null.vals
+  }
+}
+# stop the cluster
+stopCluster(cl)
+
+ses.FD.biome <- NA
+for(i in 1:Ncell){ cat("\r", i, 'from', dim(occr)[1])
+  ses.FD.biome[i] <- (FD$FDis[i] -
+                        mean(as.numeric(na.omit(FD.biome.random[,i])))/
+    sd(as.numeric(na.omit(FD.biome.random[,i]))))
+}
+
+
+FD_metrics <- cbind(FDis=FD$FDis, ses.FD.realm, ses.FD.biorealm, ses.FD.biome)
+```
+
+
+# METADATA
+```{r}
+metadata <- cbind(data.frame(XY),
+                  com_metrics,
+                  com_metrics_ses,
+                  FD_metrics,
+                  env.vars)
+```
+
+
+# WRITE RESULTS
+```{r}
+write.csv(metadata, paste(savedatafolder,"Results/amphibians",'_metadata.csv',sep=""))
+```
+
+# SAVE
+```{r echo=F, eval=FALSE}
+save.image(paste(savedatafolder,"Code/amphibians",'_data.RData',sep=""))
+```
