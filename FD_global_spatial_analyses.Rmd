@@ -21,7 +21,7 @@ We used `r info[1]$R$ver` and the following packages:
 rm(list=ls())
 gc()
 
-list.of.packages <- c("raster","spdep","ncf","doParallel","foreach","piecewiseSEM","nlme","plotrix","QuantPsyc","pgirmess","MuMIn","ggplot2","SpatialPack","mctest","GGally","maps","data.table","DiagrammeR","V8","DiagrammeRsvg","htmltools","rsvg","Rgraphviz","knitr")
+list.of.packages <- c("raster","spdep","ncf","doParallel","foreach","piecewiseSEM","nlme","plotrix","QuantPsyc","pgirmess","MuMIn","ggplot2","SpatialPack","mctest","GGally","maps","data.table","DiagrammeR","V8","DiagrammeRsvg","htmltools","rsvg","Rgraphviz","knitr","PerformanceAnalytics","spatialreg")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -59,13 +59,8 @@ func_splint <- function(x,interval=4) {
 ```{r , echo=F}
 land <- rgdal::readOGR("G:/GIS/Shp files/ne_50m_land/ne_50m_land_no_artic.shp")
 crs(land) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
-land <- spTransform(land, CRS("+proj=cea +datum=WGS84"))
+land <- spTransform(land, CRS("+proj=moll +datum=WGS84"))
 
-
-# REFERENCE PROJECTION MAP
-mapa <- raster(xmn = -20592508, xmx = 20588492, ymn = -5743602, ymx = 6573398,
-               crs = CRS("+proj=cea +datum=WGS84"))
-res(mapa) <- 111000
 ```
 
 # Load data
@@ -85,6 +80,7 @@ for(i in 1:length(taxa)){
 }
 names(XY) <- taxa
 
+
 ```
 
 # Check pairwise correlation among FD metrics
@@ -93,32 +89,128 @@ FD_metrics <- c("FDis","ses.FD.realm","ses.FD.biome","ses.FD.biorealm")
 
 # For amphibians
 pairs(metadata$amphibians[,FD_metrics])
-# we identify outliers in ses.FD.biorealm
-boxplot(metadata$amphibians$ses.FD.biorealm)
+# we identify outliers in ses.FD.realm
+# boxplot(metadata$amphibians$ses.FD.realm)
 # we therefore decided for removing these outliers
-metadata$amphibians$ses.FD.biorealm[metadata$amphibians$ses.FD.biorealm < (-70)] <- NA
-metadata$amphibians$ses.FD.realm[metadata$amphibians$ses.FD.realm < (-60)] <- NA
-
-# For reptiles
-pairs(metadata$reptiles[,FD_metrics])
-# we identify outliers in ses.FD.biorealm
-boxplot(metadata$reptiles$ses.FD.biorealm)
-# we therefore decided for removing these outliers
-metadata$reptiles$ses.FD.biorealm[metadata$reptiles$ses.FD.biorealm < (-50)] <- NA
+# metadata$amphibians$ses.FD.realm[metadata$amphibians$ses.FD.realm < (-70)] <- NA
+# metadata$amphibians$ses.FD.realm[metadata$amphibians$ses.FD.realm < (-60)] <- NA
 
 # For birds
 pairs(metadata$birds[,FD_metrics])
-# we identify outliers in ses.FD.biorealm
-boxplot(metadata$birds$ses.FD.biorealm)
+# we identify outliers in ses.FD.realm
+# boxplot(metadata$birds$ses.FD.realm)
 # we therefore decided for removing these outliers
-metadata$birds$ses.FD.biorealm[metadata$birds$ses.FD.biorealm < (-220)] <- NA
+# metadata$birds$ses.FD.realm[metadata$birds$ses.FD.realm < (-220)] <- NA
 
 # For mammals
 pairs(metadata$mammals[,FD_metrics])
-# we identify outliers in ses.FD.biorealm
-boxplot(metadata$mammals$ses.FD.biorealm)
+# we identify outliers in ses.FD.realm
+# boxplot(metadata$mammals$ses.FD.realm)
 # we therefore decided for removing these outliers
-metadata$mammals$ses.FD.biorealm[metadata$mammals$ses.FD.biorealm < (-100)] <- NA
+# metadata$mammals$ses.FD.realm[metadata$mammals$ses.FD.realm < (-100)] <- NA
+
+# For reptiles
+pairs(metadata$reptiles[,FD_metrics])
+# we identify outliers in ses.FD.realm
+# boxplot(metadata$reptiles$ses.FD.realm)
+# we therefore decided for removing these outliers
+# metadata$reptiles$ses.FD.realm[metadata$reptiles$ses.FD.realm < (-50)] <- NA
+```
+
+# Correlations
+```{r warning= F}
+
+for(i in 1:length(taxa)){
+  png(paste(savedatafolder,"results/",taxa[i],"_correlations.png",sep=""),
+      units = "in", width = 7, height = 7, res = 300)
+  chart.Correlation(data.frame(
+    richness = metadata[[i]]$SPD,
+    Div = metadata[[i]]$DIV_eq,
+    Div_ses = metadata[[i]]$ses_DIV_eq_realm,
+    MPD = metadata[[i]]$MPD_,
+    MPD_ses = metadata[[i]]$ses_MPD_realm,
+    FDis_ses = metadata[[i]]$ses.FD.realm,
+    velocity = metadata[[i]]$velocity, 
+    Temp_stab = metadata[[i]]$temp.stab, 
+    Temp_dist = metadata[[i]]$tempdist, 
+    Temp_nov = metadata[[i]]$tempnov, 
+    Clim_stab = metadata[[i]]$climate.stab, 
+    Clim_dist = metadata[[i]]$climdist, 
+    Clim_nov = metadata[[i]]$climnov), 
+    histogram=TRUE, pch=19)
+  dev.off()
+}
+
+# remove outilers for FDses in reptiles
+# hist(metadata$reptiles$ses.FD.realm)
+# metadata$reptiles$ses.FD.realm[which(metadata$reptiles$ses.FD.realm < -50)] <- NA
+
+# remove outilers for DIVses in reptiles
+# hist(metadata$reptiles$ses_DIV_eq_realm)
+# metadata$reptiles$ses_DIV_eq_realm[which(metadata$reptiles$ses_DIV_eq_realm > 7)] <- NA
+
+# remove outilers for MPDses in reptiles
+# hist(metadata$reptiles$ses_MPD_realm)
+# metadata$reptiles$ses_MPD_realm[which(metadata$reptiles$ses_MPD_realm < -14)] <- NA
+
+# remove outilers for FDses in birds
+# hist(metadata$birds$ses.FD.realm)
+# metadata$birds$ses.FD.realm[which(metadata$birds$ses.FD.realm < -110)] <- NA
+
+```
+
+# Create datasets
+```{r}
+
+# Global datasets
+
+dataset.group <- list()
+
+for(i in 1:length(taxa)){
+  
+  metadata[[i]]$ses.FD.realm[
+    which(is.infinite(metadata[[i]]$ses.FD.realm))] <- NA
+  
+  dataset.tmp <- data.frame(na.omit(
+    data.frame(XY[[i]],
+               Realm = as.character(metadata[[i]]$Realm),
+               scale(data.frame(
+                 SPD = log(metadata[[i]]$SPD+1),
+                 FD = metadata[[i]]$ses.FD.realm,
+                 Div = metadata[[i]]$ses_DIV_eq_realm, 
+                 Age = metadata[[i]]$ses_MPD_realm, 
+                 Stab = metadata[[i]]$temp.stab, 
+                 Prod = metadata[[i]]$NPP, 
+                 TRI = metadata[[i]]$tri,
+                 Temperature = metadata[[i]]$mean.temp)))))
+  
+  dataset.group[[i]] <- dataset.tmp
+}
+names(dataset.group) <- taxa
+
+### Regional datasets
+Realms <- as.character(na.omit(unique(metadata[[2]]$Realm)))
+Realms <- Realms[-which(Realms=="Oceania")]
+NRealm <- length(Realms)
+
+reg_dataset <- list()
+
+for (i in 1:length(taxa)){
+  reg_dataset.tmp <- list()
+  for (j in 1:NRealm){
+    
+    reg_dataset.tmp_ <- dataset.group[[i]]
+    
+    reg_dataset.tmp[[j]] <- reg_dataset.tmp_[which(as.character(reg_dataset.tmp_$Realm) == Realms[j]),]
+    
+  }
+  names(reg_dataset.tmp) <- Realms
+  reg_dataset[[i]] <- reg_dataset.tmp
+  
+}
+names(reg_dataset) <- taxa
+
+# Stab = max(metadata[[i]]$temp.stab) - metadata[[i]]$temp.stab , # invert temp.stab  (higher values are more stable, not instable)
 ```
 
 
@@ -133,6 +225,9 @@ for(i in 1:length(taxa)){
                                   y=temp.meta[,2],
                                   z=temp.meta[,n]),
                        crs=CRS("+proj=cea +datum=WGS84"))
+    
+    d <- projectRaster(d, crs = crs(land)) # Project to Mollweide
+    
     s.temp <- addLayer(s.temp,d)
   }
   names(s.temp) <- names(temp.meta)[3:ncol(temp.meta)]
@@ -146,15 +241,17 @@ names(s) <- taxa
 # Maps
 ## Prepare
 ```{r getJenksBreaks, warning= F}
-maps_vars <- c("SPD", "DIV_eq", "ses_MPD_biorealm", "ses.FD.biorealm")
+maps_vars <- c("SPD", "ses_DIV_eq_realm", "ses_MPD_realm", "ses.FD.realm")
 
 class_int <- list()
 for(i in 1:length(taxa)){
   class_int.tmp <- list()
   for(j in 1:length(maps_vars)){
     # Get class intervals
+    tmp <- na.omit(metadata[[i]][,maps_vars[j]])
+    tmp[is.infinite(tmp)] <- NA
     class_int.tmp[[j]] <- 
-      BAMMtools::getJenksBreaks(metadata[[i]][,maps_vars[j]], 20)
+      BAMMtools::getJenksBreaks(tmp, 20)
     # avoid identical breaks
     class_int.tmp[[j]] <- unique(class_int.tmp[[j]])
   }
@@ -174,9 +271,8 @@ maps_vars_names <- c("Species richness",
                      "Assemblage age (SES)",
                      "Functional diversity (SES)")
 
-#pdf(paste(savedatafolder,"results/",taxa[i],"_maps.pdf",sep=""),width = 14)
 png(paste(savedatafolder,"results/maps.png",sep=""), 
-    units = "in", width = 14, height = 5, res = 300)
+    units = "in", width = 11, height = 5, res = 300)
 layout(matrix(c(1:(4*4)), 4, 4, byrow = T))
 
 par(mar=c(0,0,2,0))
@@ -208,7 +304,7 @@ for(i in 1:length(maps_vars)){
          col=colorRampPalette(c('blue','lightblue','yellow','red'))(20))
     map(land,add=T,cex=.5)
     plot(s[[j]][[maps_vars[i]]],add=T,main='',axes=F,box=F,
-         legend.only=TRUE,smallplot=c(0.07,.09, 0.05,.5),
+         legend.only=TRUE,smallplot=c(0.05,.07, 0.05,.5),
          axis.args=list(at=labs,
                         labels=labs), 
          breaks = class_int[[j]][[maps_vars[i]]],
@@ -220,46 +316,59 @@ dev.off()
 
 ```
 
-# Correlations
-```{r warning= F}
+## Plot FD maps
+```{r maps, warning= F}
 
-for(i in 1:length(taxa)){
-  #pdf(paste(savedatafolder,"results/mammals_correlations.pdf",sep=""))
-  png(paste(savedatafolder,"results/",taxa[i],"_correlations.png",sep=""),
-      units = "in", width = 7, height = 7, res = 300)
-  chart.Correlation(data.frame(
-    richness = metadata[[i]]$SPD,
-    Div_Jetz = metadata[[i]]$DIV_eq,
-    AGE_Cmean = metadata[[i]]$AGE3,
-    AGE_Cmax = metadata[[i]]$AGE4,
-    MPD_ses = metadata[[i]]$ses_MPD_biorealm,
-    FDis_ses = metadata[[i]]$ses.FD.biorealm,
-    velocity = metadata[[i]]$velocity, 
-    Temp_stab = metadata[[i]]$temp.stab, 
-    Temp_dist = metadata[[i]]$tempdist, 
-    Temp_nov = metadata[[i]]$tempnov, 
-    Prod = metadata[[i]]$Prod, 
-    NPP = metadata[[i]]$NPP,
-    TRI = metadata[[i]]$tri,
-    Mean_Temp = metadata[[i]]$mean.temp), 
-    histogram=TRUE, pch=19)
-  dev.off()
+png(paste(savedatafolder,"results/FD_maps.png",sep=""), 
+    units = "in", width = 10, height = 5, res = 300)
+layout(matrix(c(1:4), 2, 2, byrow = T))
+
+i = 4
+
+par(mar=c(0,0,1,0))
+
+for(j in 1:length(taxa)){
+  
+  maintitle <- paste(toupper(substr(taxa[j], 1, 1)), 
+                     substr(taxa[j], 2, nchar(taxa[j])), sep="")
+  labs <- round(func_splint(class_int[[j]][[maps_vars[i]]],5),0)
+  
+  plot(land, main=maintitle, cex=.5, border="white")
+  plot(s[[j]][[maps_vars[i]]],add=T,
+       axes=F,box=F,legend=FALSE,
+       axis.args=list(at=labs,
+                      labels=labs), 
+       breaks = class_int[[j]][[maps_vars[i]]],
+       col=colorRampPalette(c('blue','lightblue','yellow','red'))(20))
+  map(land,add=T,cex=.5)
+  plot(s[[j]][[maps_vars[i]]],add=T,main='',axes=F,box=F,
+       legend.only=TRUE,smallplot=c(0.05,.07, 0.05,.5),
+       axis.args=list(at=labs,
+                      labels=labs), 
+       breaks = class_int[[j]][[maps_vars[i]]],
+       col=colorRampPalette(c('blue','lightblue','yellow','red'))(20))
 }
+
+dev.off()
+
 ```
+
+
 
 
 # Test correlation among predictors
 ```{r warning= F}
 independents <- 
-  data.frame(scale(data.frame(metadata[[2]]$ses_MPD_biorealm,
-                              metadata[[2]]$velocity, 
-                              metadata[[2]]$temp.stab, 
-                              metadata[[2]]$tempdist, 
-                              metadata[[2]]$tempnov, 
-                              metadata[[2]]$Prod, 
-                              metadata[[2]]$NPP,
-                              metadata[[2]]$tri,
-                              metadata[[2]]$mean.temp)))
+  data.frame(scale(data.frame(velocity = metadata[[i]]$velocity, 
+                              Temp_stab = metadata[[i]]$temp.stab, 
+                              Temp_dist = metadata[[i]]$tempdist, 
+                              Temp_nov = metadata[[i]]$tempnov, 
+                              Clim_stab = metadata[[i]]$climate.stab, 
+                              Clim_dist = metadata[[i]]$climdist, 
+                              Clim_nov = metadata[[i]]$climnov,
+                              NPP = metadata[[i]]$NPP,
+                              TRI = metadata[[i]]$tri,
+                              Mean_Temp = metadata[[i]]$mean.temp)))
 
 #View(cor(na.omit(independents)))
 #usdm::vif(data.frame(scale(independents)))
@@ -274,115 +383,12 @@ usdm::vif(data.frame(scale(independents_vif)))
 # ses.MPD
 # Temperature distance
 # mean temperature
-# vegetation (tree high)
 # TRI
 # We removed temperature novelty, temperature stability and velocity because they all showed a smaller correlation with Div and FD.ses than temperature distance. The exception was reptiles, that showed strongest correlation between temperature stability and Div and FD.ses.
 
 ```
 
-# Create datasets
-```{r}
 
-# Global datasets
-
-# standardized
-dataset.group <- list()
-# non-standardized
-dataset.group.ne <- list()
-
-for(i in 1:length(taxa)){
-  
-  metadata[[i]]$ses.FD.biorealm[
-    which(is.infinite(metadata[[i]]$ses.FD.biorealm))] <- 
-    NA
-  
-  # standardized
-  dataset.tmp <- data.frame(na.omit(
-    data.frame(XY[[i]],
-               scale(data.frame(
-                 SPD = log(metadata[[i]]$SPD+1),
-                 FD = metadata[[i]]$ses.FD.biorealm,
-                 Div = metadata[[i]]$DIV_eq, 
-                 Age = metadata[[i]]$ses_MPD_biorealm, 
-                 Stab = max(metadata[[i]]$tempdist) - metadata[[i]]$tempdist, # invert tempdist (higher values are more stable, not instable)
-                 Prod = metadata[[i]]$NPP, 
-                 TRI = metadata[[i]]$tri,
-                 Temperature = metadata[[i]]$mean.temp)))))
-  
-  dataset.group[[i]] <- dataset.tmp
-  
-  # non-standardized
-  dataset.tmp <- data.frame(na.omit(
-    data.frame(XY[[i]],
-               SPD = log(metadata[[i]]$SPD+1),
-               FD = metadata[[i]]$ses.FD.biorealm,
-               Div = metadata[[i]]$DIV_eq, 
-               Age = metadata[[i]]$ses_MPD_biorealm, 
-               Stab = max(metadata[[i]]$tempdist) - metadata[[i]]$tempdist, # invert tempdist (higher values are more stable, not instable)
-               Prod = metadata[[i]]$NPP, 
-               TRI = metadata[[i]]$tri,
-               Temperature = metadata[[i]]$mean.temp)))
-  
-  dataset.group.ne[[i]] <- dataset.tmp
-}
-names(dataset.group) <- taxa
-names(dataset.group.ne) <- taxa
-
-
-### Regional datasets
-Realms <- as.character(na.omit(unique(metadata[[2]]$Realm)))
-NRealm <- length(Realms)
-
-# standardized
-reg_dataset <- list()
-# non-standardized
-reg_dataset.ne <- list()
-
-# standardized
-for (i in 1:length(taxa)){
-  reg_dataset.tmp <- list()
-  reg_dataset.ne.tmp <- list()
-  for (j in 1:NRealm){
-    # standardized
-    reg_dataset.tmp_ <- data.frame(na.omit(
-      data.frame(XY[[i]],
-                 Realm = metadata[[i]]$Realm,
-                 scale(data.frame(
-                   SPD = log(metadata[[i]]$SPD+1),
-                   FD = metadata[[i]]$ses.FD.biorealm,
-                   Div = metadata[[i]]$DIV_eq, 
-                   Age = metadata[[i]]$ses_MPD_biorealm, 
-                   Stab = max(metadata[[i]]$tempdist) - metadata[[i]]$tempdist, # invert tempdist (higher values are more stable, not instable)
-                   Prod = metadata[[i]]$NPP, 
-                   TRI = metadata[[i]]$tri,
-                   Temperature = metadata[[i]]$mean.temp)))))
-    
-    reg_dataset.tmp[[j]] <- reg_dataset.tmp_[which(reg_dataset.tmp_$Realm == Realms[j]),]
-    
-    # non-standardized
-    reg_dataset.tmp_ <- data.frame(na.omit(
-      data.frame(XY[[i]],
-                 SPD = log(metadata[[i]]$SPD+1),
-                 FD = metadata[[i]]$ses.FD.biorealm,
-                 Div = metadata[[i]]$DIV_eq, 
-                 Age = metadata[[i]]$ses_MPD_biorealm, 
-                 Stab = max(metadata[[i]]$tempdist) - metadata[[i]]$tempdist, # invert tempdist (higher values are more stable, not instable)
-                 Prod = metadata[[i]]$NPP, 
-                 TRI = metadata[[i]]$tri,
-                 Temperature = metadata[[i]]$mean.temp)))
-    
-    reg_dataset.ne.tmp[[j]] <- reg_dataset.tmp_[which(reg_dataset.tmp_$Realm == Realms[j]),]
-    
-  }
-  names(reg_dataset.tmp) <- Realms
-  reg_dataset[[i]] <- reg_dataset.tmp
-  
-  names(reg_dataset.ne.tmp) <- Realms
-  reg_dataset.ne[[i]] <- reg_dataset.ne.tmp
-}
-names(reg_dataset) <- taxa
-names(reg_dataset.ne) <- taxa
-```
 
 # OLS model
 ## Global models
@@ -390,86 +396,38 @@ names(reg_dataset.ne) <- taxa
 
 options(na.action("na.omit"))
 
-res.lm.rich <- list()
-res.lm.div <- list()
-res.lm.FD <- list()
-
-model.summary <- list()
+lm.models <- list()
 
 for(i in 1:length(taxa)){
   
-  model.rich <- lm(SPD ~ 
-                     FD+
-                     Div+
-                     Age+
-                     Stab+
-                     Prod+
-                     TRI+
-                     Temperature,
-                   data = dataset.group[[i]], 
-                   na.action=na.fail)
-  
-  res.lm.rich[[i]] <- residuals(model.rich)
-  
   model.div <- lm(Div ~ 
                     Age+
-                    Stab+
-                    #Prod+
-                    TRI+
-                    Temperature,
-                  data = dataset.group[[i]], 
-                  na.action=na.fail)
+                    Stab,
+                  data = dataset.group[[i]])
   
-  res.lm.div[[i]] <- residuals(model.div)
+  model.div2 <- lm(Div ~ 
+                    Age+
+                    Stab,
+                  data = dataset.group[[i]])
+  
+  model.age <- lm(Age ~ 
+                    Stab,
+                  data = dataset.group[[i]])
   
   model.FD <- lm(FD ~ 
                    Div+
                    Age+
                    Stab+
-                   Prod+
-                   TRI,
-                 data = dataset.group[[i]], 
-                 na.action=na.fail)
+                   Prod,
+                 data = dataset.group[[i]])
   
-  res.lm.FD[[i]] <- residuals(model.FD)
-  
-  model.rich.2 <- summary(model.rich)
-  model.rich.summary <- model.rich.2$coefficients[-1,]
-  
-  model.div.2 <- summary(model.div)
-  model.div.summary <- model.div.2$coefficients[-1,]
-  
-  model.FD.2 <- summary(model.FD)
-  model.FD.summary <- model.FD.2$coefficients[-1,]
-  
-  model.summary_ <- data.frame(
-    rbind(data.frame(model = "Rich",
-                     data.frame(
-                       var = rownames(model.rich.summary),
-                       model.rich.summary),
-                     confint(model.rich)[-1,]),
-          data.frame(model = "Div",
-                     data.frame(
-                       var = rownames(model.div.summary),
-                       model.div.summary),
-                     confint(model.div)[-1,]),
-          data.frame(model = "FD",
-                     data.frame(
-                       var = rownames(model.FD.summary),
-                       model.FD.summary),
-                     confint(model.FD)[-1,])))
-  
-  names(model.summary_)[7] <- "Lower_IC"
-  names(model.summary_)[8] <- "Higher_IC"
-  
-  model.summary_$sig <- ifelse(model.summary_$Pr...t..<0.05,1,0)
-  
-  model.summary[[i]] <- model.summary_
+  lm.models[[i]] <- list(Div = model.div,
+                         Div2 = model.div2,
+                         Age = model.age,
+                         FD = model.FD)
 }
-names(model.summary) <- taxa
 
-model.summary.2 <- rbindlist(model.summary,idcol = T)
-names(model.summary.2)[1] <- "taxa"
+
 ```
 
 ## Run Regional models
@@ -519,8 +477,7 @@ for(i in 1:length(taxa)){
                      Div+
                      Age+
                      Stab+
-                     Prod+
-                     TRI,
+                     Prod,
                    data = datatmp, 
                    na.action=na.fail)
     
@@ -586,86 +543,8 @@ names(res.lm.div.realm) <- taxa
 names(res.lm.FD.realm) <- taxa
 
 # add global model
-model.summary.2$realm <- "Global"
+model.summary.2$REALM <- "Global"
 model.summary.2 <- rbind(model.summary.2,model.summary.realm)
-
-```
-
-
-## Correlogram global models
-```{r}
-
-rich.lm.res.cor <- list()
-div.lm.res.cor <- list()
-FD.lm.res.cor <- list()
-
-rich.lm.res.cor2 <- list()
-div.lm.res.cor2 <- list()
-FD.lm.res.cor2 <- list()
-
-for(i in 1:length(taxa)){ cat("Calculating correlograms for", taxa[i], "\n")
-  
-  rich.index = sample(1:length(res.lm.rich[[i]]),1000,replace = F)
-  div.index = sample(1:length(res.lm.div[[i]]),1000,replace = F)
-  FD.index = sample(1:length(res.lm.FD[[i]]),1000,replace = F)
-  
-  rich.lm.res.cor[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][rich.index,], 
-                       z=res.lm.rich[[i]][rich.index], 
-                       method="Moran"))
-  
-  div.lm.res.cor[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][div.index,], 
-                       z=res.lm.div[[i]][div.index], 
-                       method="Moran"))
-  
-  FD.lm.res.cor[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][FD.index,], 
-                       z=res.lm.FD[[i]][FD.index], 
-                       method="Moran"))
-  
-  rich.lm.res.cor2[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][rich.index,], 
-                       z=dataset.group[[i]]$SPD[rich.index], 
-                       method="Moran"))
-  
-  div.lm.res.cor2[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][div.index,], 
-                       z=dataset.group[[i]]$Div[div.index], 
-                       method="Moran"))
-  
-  FD.lm.res.cor2[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][FD.index,], 
-                       z=dataset.group[[i]]$FD[FD.index], 
-                       method="Moran"))
-  
-}
-
-# plot
-par(mfrow=c(3,4))
-for(i in 1:length(taxa)){ 
-  {plot(coef~dist.class, xlab="Geographic distance", ylab="Moran's I", pch=1, bty="l", cex.lab=1.2, ylim=c(-1,1), data=rich.lm.res.cor[[i]])
-    abline (h=0, lty=2, col="black")
-    lines(rich.lm.res.cor[[i]]$dist.class, rich.lm.res.cor[[i]]$coef, type = "l") # add connected line segments to Morans'I of model residuals
-    lines(rich.lm.res.cor2[[i]]$dist.class, rich.lm.res.cor2[[i]]$coef, col = "red", lwd=2) # add connected line segments to Morans'I of the raw value
-    legend((rich.lm.res.cor[[i]][14,1])/3.2, 1, c(paste(taxa[i],"Richness OLS residuals")), pch=c(16,1), lty=c(2,1), bty="n", cex=0.9)
-  }
-  
-  {plot(coef~dist.class, xlab="Geographic distance", ylab="Moran's I", pch=1, bty="l", cex.lab=1.2, ylim=c(-1,1), data=div.lm.res.cor[[i]])
-    abline (h=0, lty=2, col="black")
-    lines(div.lm.res.cor[[i]]$dist.class, div.lm.res.cor[[i]]$coef, type = "l") # add connected line segments to Morans'I of model residuals
-    lines(div.lm.res.cor2[[i]]$dist.class, div.lm.res.cor2[[i]]$coef, col = "red", lwd=2) # add connected line segments to Morans'I of the raw value
-    legend((div.lm.res.cor[[i]][14,1])/3.2, 1, c(paste(taxa[i],"Div OLS residuals")), pch=c(16,1), lty=c(2,1), bty="n", cex=0.9)
-  }
-  
-  {plot(coef~dist.class, xlab="Geographic distance", ylab="Moran's I", pch=1, bty="l", cex.lab=1.2, ylim=c(-1,1), data=FD.lm.res.cor[[i]])
-    abline (h=0, lty=2, col="black")
-    lines(FD.lm.res.cor[[i]]$dist.class, FD.lm.res.cor[[i]]$coef, type = "l") # add connected line segments to Morans'I of model residuals
-    lines(FD.lm.res.cor2[[i]]$dist.class, FD.lm.res.cor2[[i]]$coef, col = "red", lwd=2) # add connected line segments to Morans'I of the raw value
-    legend((FD.lm.res.cor[[i]][14,1])/3.2, 1, c(paste(taxa[i],"FD OLS residuals")), pch=c(16,1), lty=c(2,1), bty="n", cex=0.9)
-  }
-}
-
 
 ```
 
@@ -681,9 +560,9 @@ pdf(paste(savedatafolder,"results/OLS_models.pdf",sep=""), width = 10, height = 
 #png(paste(savedatafolder,"results/OLS_models.png",sep=""), units = "in", width = 10, height = 5, res = 300)
 ggplot(model.summary.realm[
   -which(
-    model.summary.realm$realm == "Panamanian" |
-      model.summary.realm$realm == "Oceanina" |
-      model.summary.realm$realm == "Madagascan"),], 
+    model.summary.realm$REALM == "Panamanian" |
+      model.summary.realm$REALM == "Oceanian" |
+      model.summary.realm$REALM == "Madagascan"),], 
   aes(x = var, y = Estimate, 
       color = realm,
       alpha = sig)) +
@@ -726,13 +605,13 @@ nlw <-
     nbdist<-dnearneigh(x=as.matrix(dataset.group[[i]][,1:2]), d1=0, d2=5000) 
     
     # compute the Euclidean distance between neighbouring sites
-    neigh.dist<-nbdists(nbdist, 
-                        as.matrix(dataset.group[[i]][,1:2]), longlat=F)
-    # compute the inverse distance weigthed matrix
-    inverse<-lapply(neigh.dist, function(x) (1/(x^2))) 
+    # neigh.dist<-nbdists(nbdist, 
+    #                     as.matrix(dataset.group[[i]][,1:2]), longlat=F)
+    # # compute the inverse distance weigthed matrix
+    # inverse<-lapply(neigh.dist, function(x) (1/(x^2))) 
     # coding style W = row standardised
     nb2listw(neighbours=nbdist, 
-             glist=inverse, 
+             # glist=inverse, 
              style="W", 
              zero.policy=FALSE) 
   }
@@ -744,16 +623,14 @@ stopCluster(cl)
 
 end_time <- Sys.time()
 end_time-start_time
-# takes X hours
-
-rm(neigh.dist, inverse, nbdist)
+# takes 5 minutes
 
 ```
 
 ## Global models
 ```{r warning= F}
 
-#load("Code/sar.models.RData")
+#load("Code/sarmodels.rds")
 
 ncores <- detectCores()
 cl <- makeCluster(ncores)
@@ -766,37 +643,35 @@ sar.models <-
     
     models.list <- list()
     
-    model.rich <- errorsarlm(SPD ~ 
-                               FD+
-                               Div+
-                               Age+
-                               Stab+
-                               Prod+
-                               TRI+
-                               Temperature,
-                             data = dataset.group[[i]], 
-                             listw = nlw[[i]])
+    model.age <- spatialreg::errorsarlm(Age ~ 
+                                          Stab,
+                                        data = dataset.group[[i]],
+                                        listw = nlw[[i]])
     
-    model.div <- errorsarlm(Div ~ 
-                              Age+
-                              Stab+
-                              #Prod+
-                              TRI+
-                              Temperature,
-                            data = dataset.group[[i]],
-                            listw = nlw[[i]])
+    model.div <- spatialreg::errorsarlm(Div ~ 
+                                          Age+
+                                          Stab,
+                                        data = dataset.group[[i]],
+                                        listw = nlw[[i]])
     
-    model.FD <- errorsarlm(FD ~ 
-                             Div+
-                             Age+
-                             Stab+
-                             Prod+
-                             TRI,
-                           data = dataset.group[[i]], 
+    model.div2 <- spatialreg::errorsarlm(Div ~ 
+                                           Age+
+                                           Stab+
+                                           Prod,
+                                         data = dataset.group[[i]],
+                                         listw = nlw[[i]])
+    
+    model.FD <- spatialreg::errorsarlm(FD ~ 
+                                         Div+
+                                         Age+
+                                         Stab+
+                                         Prod,
+                                       data = dataset.group[[i]], 
                            listw = nlw[[i]])
     
-    models.list$rich <- model.rich
     models.list$div <- model.div
+    models.list$div2 <- model.div2
+    models.list$age <- model.age
     models.list$FD <- model.FD
     
     models.list
@@ -808,42 +683,34 @@ stopCluster(cl)
 
 end_time <- Sys.time()
 end_time-start_time
-# takes X hours
+# takes 2.37 hours
+
+# saveRDS(sar.models, "sarmodels.rds")
+# sar.models <- readRDS("sarmodels.rds")
+
 
 ```
 
-## Get results from global models
+### Get results from global models
 ```{r echo=F, eval=FALSE}
 
 model.summary.sar <- list()
 
 for(i in 1:length(taxa)){
   
-  model.rich.2 <- summary(sar.models[[i]]$rich)
-  model.rich.summary <- model.rich.2$Coef[-1,]
+  model.div <- summary(sar.models[[i]]$div)
+  model.div.vars <- rownames(model.div$Coef)[-1]
+  model.div.summary <- model.div$Coef[-1,]
   
-  model.div.2 <- summary(sar.models[[i]]$div)
-  model.div.summary <- model.div.2$Coef[-1,]
+  model.FD <- summary(sar.models[[i]]$FD)
+  model.FD.vars <- rownames(model.FD$Coef)[-1]
+  model.FD.summary <- model.FD$Coef[-1,]
   
-  model.FD.2 <- summary(sar.models[[i]]$FD)
-  model.FD.summary <- model.FD.2$Coef[-1,]
-  
-  model.summary.sar_ <- data.frame(
-    rbind(data.frame(model = "Rich",
+  model.summary.sar_ <- data.frame(model = "FD",
                      data.frame(
-                       var = rownames(model.rich.summary),
-                       model.rich.summary),
-                     confint(sar.models[[i]]$rich)[-1:-2,]),
-          data.frame(model = "Div",
-                     data.frame(
-                       var = rownames(model.div.summary),
-                       model.div.summary),
-                     confint(sar.models[[i]]$div)[-1:-2,]),
-          data.frame(model = "FD",
-                     data.frame(
-                       var = rownames(model.FD.summary),
+                       var = model.FD.vars,
                        model.FD.summary),
-                     confint(sar.models[[i]]$FD)[-1:-2,])))
+                     confint(sar.models[[i]]$FD)[-1:-2,])
   
   names(model.summary.sar_)[7] <- "Lower_IC"
   names(model.summary.sar_)[8] <- "Higher_IC"
@@ -858,16 +725,14 @@ model.summary.sar.2 <- rbindlist(model.summary.sar,idcol = T)
 names(model.summary.sar.2)[1] <- "taxa"
 ```
 
-## Get residuals from global models
+### Get residuals from global models
 ```{r}
-res.sar.rich <- list()
-res.sar.div <- list()
 res.sar.FD <- list()
+res.lm.FD <- list()
 
 for(i in 1:length(taxa)){
-  res.sar.rich[[i]] <- residuals(sar.models[[i]]$rich)
-  res.sar.div[[i]] <- residuals(sar.models[[i]]$div)
   res.sar.FD[[i]] <- residuals(sar.models[[i]]$FD)
+  res.lm.FD[[i]] <- residuals(lm.models[[i]]$FD)
 }
 ```
 
@@ -876,14 +741,12 @@ for(i in 1:length(taxa)){
 
 model.summary.sar.realm <- list()
 
-res.sar.rich.realm <- list()
-res.sar.div.realm <- list()
 res.sar.FD.realm <- list()
 
 ## Models by realm
 
 for(i in 1:length(taxa)){ 
-  cat("Taxa", taxa[i], '-', i, 'from', length(taxa))
+  cat("/r","Taxa", taxa[i], '-', i, 'from', length(taxa))
   
   cl <- makeCluster(8)
   registerDoParallel(cl)
@@ -900,62 +763,47 @@ for(i in 1:length(taxa)){
       # define connectivity matrix (0/1)
       nbdist<-dnearneigh(x=datatmp, d1=0, d2=5000) 
       # compute the Euclidean distance between neighbouring sites
-      neigh.dist<-nbdists(nbdist, datatmp, longlat=F) 
-      
-      ## conditioned weighted matrix
-      if(Realms[j]=="Afrotropical"|
-         Realms[j]=="Sino-Japanese"|
-         Realms[j]=="Australian"|
-         Realms[j]=="Nearctic"|
-         Realms[j]=="Neotropical"|
-         Realms[j]=="Oriental"|
-         Realms[j]=="Palearctic"){
-        inverse<-lapply(neigh.dist, function(x) (1/(x^4)))
-      }
-      if(Realms[j]=="Madagascan"|
-         Realms[j]=="Oceanina"|
-         Realms[j]=="Panamanian"|
-         Realms[j]=="Saharo-Arabian"){
-        inverse<-lapply(neigh.dist, function(x) (1/(x^2)))
-      }
+      # neigh.dist<-nbdists(nbdist, datatmp, longlat=F) 
+      # 
+      # inverse<-lapply(neigh.dist, function(x) (1/(x^2)))
+    
       # coding style W 
-      nlw2<-nb2listw(neighbours=nbdist, glist=inverse, style="W", zero.policy=FALSE) 
+      nlw2<-nb2listw(neighbours=nbdist, 
+                     # glist=inverse, 
+                     style="W", zero.policy=FALSE) 
       
       
-      model.rich <- errorsarlm(SPD ~ 
-                                 FD+
-                                 Div+
-                                 Age+
-                                 Stab+
-                                 Prod+
-                                 TRI+
-                                 Temperature,
-                               data = datatmp, 
-                               listw=nlw2, 
-                               zero.policy = T)
+      models.list <- list()
       
-      model.div <- errorsarlm(Div ~ 
-                                Age+
-                                Stab+
-                                #Prod+
-                                TRI+
-                                Temperature,
-                              data = datatmp, 
-                              listw=nlw2, 
-                              zero.policy = T)
+      model.age <- spatialreg::errorsarlm(Age ~ 
+                                            Stab,
+                                          data = datatmp,
+                                          listw = nlw2)
       
-      model.FD <- errorsarlm(FD ~ 
-                               Div+
-                               Age+
-                               Stab+
-                               Prod+
-                               TRI,
-                             data = datatmp, 
-                             listw=nlw2, 
-                             zero.policy = T)
+      model.div <- spatialreg::errorsarlm(Div ~ 
+                                            Age+
+                                            Stab,
+                                          data = datatmp,
+                                          listw = nlw2)
       
-      models.list$rich <- model.rich
+      model.div2 <- spatialreg::errorsarlm(Div ~ 
+                                             Age+
+                                             Stab+
+                                             Prod,
+                                           data = datatmp,
+                                           listw = nlw2)
+      
+      model.FD <- spatialreg::errorsarlm(FD ~ 
+                                           Div+
+                                           Age+
+                                           Stab+
+                                           Prod,
+                                         data = datatmp, 
+                                         listw = nlw2)
+      
       models.list$div <- model.div
+      models.list$div2 <- model.div2
+      models.list$age <- model.age
       models.list$FD <- model.FD
       
       models.list
@@ -972,35 +820,16 @@ for(i in 1:length(taxa)){
   
   for(j in 1:NRealm){ 
     
-    res.sar.rich.realm_[[j]] <- residuals(sar.models.realm[[j]]$rich)
-    res.sar.div.realm_[[j]] <- residuals(sar.models.realm[[j]]$div)
     res.sar.FD.realm_[[j]] <- residuals(sar.models.realm[[j]]$FD)
-    
-    model.rich.2 <- summary(sar.models.realm[[j]]$rich)
-    model.rich.summary <- model.rich.2$Coef[-1,]
-    
-    model.div.2 <- summary(sar.models.realm[[j]]$div)
-    model.div.summary <- model.div.2$Coef[-1,]
     
     model.FD.2 <- summary(sar.models.realm[[j]]$FD)
     model.FD.summary <- model.FD.2$Coef[-1,]
     
-    model.summary.sar_ <- data.frame(
-      rbind(data.frame(model = "Rich",
-                       data.frame(
-                         var = rownames(model.rich.summary),
-                         model.rich.summary),
-                       confint(sar.models.realm[[j]]$rich)[-1:-2,]),
-            data.frame(model = "Div",
-                       data.frame(
-                         var = rownames(model.div.summary),
-                         model.div.summary),
-                       confint(sar.models.realm[[j]]$div)[-1:-2,]),
-            data.frame(model = "FD",
+    model.summary.sar_ <-             data.frame(model = "FD",
                        data.frame(
                          var = rownames(model.FD.summary),
                          model.FD.summary),
-                       confint(sar.models.realm[[j]]$FD)[-1:-2,])))
+                       confint(sar.models.realm[[j]]$FD)[-1:-2,])
     
     names(model.summary.sar_)[7] <- "Lower_IC"
     names(model.summary.sar_)[8] <- "Higher_IC"
@@ -1014,12 +843,8 @@ for(i in 1:length(taxa)){
   
   model.summary.sar.realm[[i]] <- rbindlist(model.summary.sar.realm_,idcol = T)
   
-  names(res.sar.rich.realm_) <- Realms
-  names(res.sar.div.realm_) <- Realms
   names(res.sar.FD.realm_) <- Realms
   
-  res.sar.rich.realm[[i]] <- res.sar.rich.realm_
-  res.sar.div.realm[[i]] <- res.sar.div.realm_
   res.sar.FD.realm[[i]] <- res.sar.FD.realm_
   
   rm(sar.models.realm)
@@ -1030,140 +855,55 @@ names(model.summary.sar.realm) <- taxa
 model.summary.sar.realm <- rbindlist(model.summary.sar.realm,idcol = T)
 names(model.summary.sar.realm)[1:2] <- c("taxa", "realm")
 
-names(res.sar.rich.realm) <- taxa
-names(res.sar.div.realm) <- taxa
 names(res.sar.FD.realm) <- taxa
 
 
 ```
 
-## Correlograms global model
-```{r}
-
-rich.sar.res.cor <- list()
-div.sar.res.cor <- list()
-FD.sar.res.cor <- list()
-
-rich.sar.res.cor2 <- list()
-div.sar.res.cor2 <- list()
-FD.sar.res.cor2 <- list()
-
-for(i in 1:length(taxa)){ cat("Calculating correlograms for", taxa[i], "\n")
-  
-  rich.index = sample(1:length(res.sar.rich[[i]]),1000,replace = F)
-  div.index = sample(1:length(res.sar.div[[i]]),1000,replace = F)
-  FD.index = sample(1:length(res.sar.FD[[i]]),1000,replace = F)
-  
-  rich.sar.res.cor[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][rich.index,], 
-                       z=res.sar.rich[[i]][rich.index], 
-                       method="Moran"))
-  
-  div.sar.res.cor[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][div.index,], 
-                       z=res.sar.div[[i]][div.index], 
-                       method="Moran"))
-  
-  FD.sar.res.cor[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][FD.index,], 
-                       z=res.sar.FD[[i]][FD.index], 
-                       method="Moran"))
-  
-  rich.sar.res.cor2[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][rich.index,], 
-                       z=dataset.group[[i]]$SPD[rich.index], 
-                       method="Moran"))
-  
-  div.sar.res.cor2[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][div.index,], 
-                       z=dataset.group[[i]]$Div[div.index], 
-                       method="Moran"))
-  
-  FD.sar.res.cor2[[i]]<-as.data.frame(
-    pgirmess::correlog(coords=XY[[i]][FD.index,], 
-                       z=dataset.group[[i]]$FD[FD.index], 
-                       method="Moran"))
-  
-}
-
-# plot
-par(mfrow=c(4,3))
-for(i in 1:length(taxa)){ 
-  
-  {plot(coef~dist.class, xlab="Geographic distance", ylab="Moran's I", 
-        cex.main=2, cex.lab=1.7, cex.axis=1.7, ylim=c(-1,1),
-        data=rich.sar.res.cor[[i]], col = "white", lwd=2)
-    abline (h=0, lty=2, col="black")
-    # add connected line segments to Morans'I of model residuals
-    lines(rich.sar.res.cor[[i]]$dist.class, rich.sar.res.cor[[i]]$coef, 
-          col = "blue", lwd=2) 
-    # add connected line segments to Morans'I of the raw value
-    lines(rich.sar.res.cor2[[i]]$dist.class, rich.sar.res.cor2[[i]]$coef, 
-          col = "red", lwd=2) 
-    legend((rich.sar.res.cor2[[i]][14,1])/3.2, 1.5, 
-           c("Richness", "SAR residuals"), y.intersp = .2,
-           pch="_", bty="n", cex=1, col = c("red","blue"))
-  }
-  
-  {plot(coef~dist.class, xlab="Geographic distance", ylab="Moran's I", 
-        cex.main=2, cex.lab=1.7, cex.axis=1.7, ylim=c(-1,1),
-        data=div.sar.res.cor[[i]], col = "white", lwd=2)
-    abline (h=0, lty=2, col="black")
-    # add connected line segments to Morans'I of model residuals
-    lines(div.sar.res.cor[[i]]$dist.class, div.sar.res.cor[[i]]$coef, 
-          col = "blue", lwd=2) 
-    # add connected line segments to Morans'I of the raw value
-    lines(div.sar.res.cor2[[i]]$dist.class, div.sar.res.cor2[[i]]$coef, 
-          col = "red", lwd=2) 
-    legend((div.sar.res.cor[[i]][14,1])/3.2, 1.5, 
-           c("Diversification", "SAR residuals"),  y.intersp = .2,
-           pch="_", bty="n", cex=1, col = c("red","blue"))
-  }
-  
-  {plot(coef~dist.class, xlab="Geographic distance", ylab="Moran's I", 
-        cex.main=2, cex.lab=1.7, cex.axis=1.7, ylim=c(-1,1),
-        data=FD.sar.res.cor[[i]], col = "white", lwd=2)
-    abline (h=0, lty=2, col="black")
-    # add connected line segments to Morans'I of model residuals
-    lines(FD.sar.res.cor[[i]]$dist.class, FD.sar.res.cor[[i]]$coef, 
-          col = "blue", lwd=2) 
-    # add connected line segments to Morans'I of the raw value
-    lines(FD.sar.res.cor2[[i]]$dist.class, FD.sar.res.cor2[[i]]$coef,  
-          col = "red", lwd=2) 
-    legend((FD.sar.res.cor[[i]][14,1])/3.2, 1.5, 
-           c("FD", "SAR residuals"),  y.intersp = .2,
-           pch="_", bty="n", cex=1, col = c("red","blue"))
-  }
-}
-
-
-
-```
-
-
 
 ## Plot model coeffs SAR models
 ```{r warning= F}
-col_realms <- c("#800000", "#808000", "#000075",
-                "#e6194B", "#f58231", "#3cb44b", "#42d4f4",
-                "#911eb4", "#fabebe", "#ffd8b1", "#e6beff")
-names(col_realms) <- c(Realms)
+col_realms <- c("darkgreen", # dark green
+                "#0072B2", # blue
+                "#00BE67", # green
+                "#56B4E9", # skyblue
+                "#E69F00", # orange
+                "#D55E00") # vermillion
+names(col_realms) <- Realms
 
-pdf(paste(savedatafolder,"results/SAR_models.pdf",sep=""), width = 10, height = 5)
-#png(paste(savedatafolder,"results/SAR_models.png",sep=""), units = "in", width = 10, height = 5, res = 300)
+model.summary.sar.realm$taxa <- factor(model.summary.sar.realm$taxa, 
+                                        levels=c('birds','mammals','amphibians','reptiles'))
+model.summary.sar.realm$var <- factor(model.summary.sar.realm$var, 
+                                        levels=c('Stab','Age','Div','Prod'))
+model.summary.sar.realm$realm <- factor(model.summary.sar.realm$realm, 
+                                        levels=c('Afrotropics',
+                                                 'Neotropics',
+                                                 'Palearctic',
+                                                 'Nearctic',
+                                                 'IndoMalay',
+                                                 'Australasia'))
 
-ggplot(data = model.summary.sar.realm[
-  -which(
-    model.summary.sar.realm$realm == "Panamanian" |
-      model.summary.sar.realm$realm == "Oceanina" |
-      model.summary.sar.realm$realm == "Madagascan"),], 
-  aes(x = var, y = Estimate, 
-      color = realm,
-      alpha = sig)) +
-  geom_hline(yintercept=0,linetype = "dashed") +
+model.summary.sar.2$taxa <- factor(model.summary.sar.2$taxa, 
+                                        levels=c('birds','mammals','amphibians','reptiles'))
+model.summary.sar.2$var <- factor(model.summary.sar.2$var, 
+                                        levels=c('Stab','Age','Div','Prod'))
+model.summary.sar.2$realm <- factor(model.summary.sar.2$realm, 
+                                        levels=c('Afrotropics',
+                                                 'Neotropics',
+                                                 'Palearctic',
+                                                 'Nearctic',
+                                                 'IndoMalay',
+                                                 'Australasia'))
+
+pdf(paste(savedatafolder,"results/SAR_models.pdf",sep=""), width = 9, height = 3)
+
+ggplot(data = model.summary.sar.realm, 
+  aes(x = var, y = Estimate, color = realm, alpha = as.factor(sig))) +
+  geom_hline(yintercept=0, linetype = "dashed") +
   geom_linerange(data = model.summary.sar.2,
                  aes(ymin=Lower_IC, 
-                     ymax=Higher_IC), color = "black") +
+                     ymax=Higher_IC), 
+                 color = "black") +
   geom_point(data = model.summary.sar.2, 
              aes(x = var, y = Estimate), 
              size = 4, color = "black") +
@@ -1173,14 +913,90 @@ ggplot(data = model.summary.sar.realm[
   geom_point(size = 2,
              position=position_dodge(0.5)) +
   scale_color_manual(values = col_realms)+
-  scale_size_manual(values = size_realms)+
-  xlab("") + coord_flip() + 
+  ylab("Std. Coeff.") + xlab("") + coord_flip() + 
   scale_radius()+
   theme_bw() +
-  #theme(text = element_text(size=20))+
-  facet_grid(model ~ taxa, scales = "free")
+  facet_grid(. ~ taxa, scales = "free")
 
 dev.off()
+
+```
+
+## Correlogram global models
+```{r}
+
+FD.sar.obs.cor <- list()
+FD.sar.res.cor <- list()
+FD.lm.res.cor <- list()
+
+for(i in 1:length(taxa)){ cat("Calculating correlograms for", taxa[i], "\n")
+  
+  res.sar.FD <- sar.models[[i]]$FD$residuals
+  FD.index = sample(1:length(res.sar.FD),1000,replace = F)
+  
+  # Observed FD
+  FD.sar.obs.cor[[i]]<-as.data.frame(
+    pgirmess::correlog(coords=XY[[i]][FD.index,], 
+                       z=dataset.group[[i]]$FD[FD.index], 
+                       method="Moran"))
+  
+  # Res sar model
+  FD.sar.res.cor[[i]]<-as.data.frame(
+    pgirmess::correlog(coords=XY[[i]][FD.index,], 
+                       z=res.sar.FD[FD.index], 
+                       method="Moran"))
+  
+  # Res lm model
+  res.lm.FD <- lm.models[[i]]$FD$residuals
+  FD.index = sample(1:length(res.lm.FD),1000,replace = F)
+  
+  FD.lm.res.cor[[i]]<-as.data.frame(
+    pgirmess::correlog(coords=XY[[i]][FD.index,], 
+                       z=res.lm.FD[FD.index], 
+                       method="Moran"))
+}
+
+# plot
+pdf("results/correlograms.pdf", 10,2.5)
+par(mfrow=c(1,4))
+for(i in 1:length(taxa)){ 
+  {plot(main = taxa[i],
+        col = "white",
+        coef~dist.class, 
+        xlab="Geographic distance", 
+        ylab="Moran's I", 
+        pch=1, bty="l", cex.lab=1.2, 
+        xlim=c(0,20000), ylim=c(-1,1), 
+        data=FD.sar.res.cor[[i]])
+    
+    abline (h=0, lty=2, col="black")
+    
+    # add connected line segments to Morans'I of the raw value
+    lines(FD.sar.obs.cor[[i]]$dist.class, 
+          FD.sar.obs.cor[[i]]$coef, 
+          col = "black", lwd=2) 
+    
+    # add connected line segments to Morans'I of lm model residuals
+    lines(FD.lm.res.cor[[i]]$dist.class, 
+          FD.lm.res.cor[[i]]$coef, 
+          col = "red", lwd=2) 
+    
+    # add connected line segments to Morans'I of SAR model residuals
+    lines(FD.sar.res.cor[[i]]$dist.class, 
+          FD.sar.res.cor[[i]]$coef, 
+          col = "blue", lwd=2) 
+    
+    legend((FD.sar.obs.cor[[i]][14,1])/4, 1, 
+           c("Observed values", 
+             "LM residuals",
+             "SAR residuals"), 
+           y.intersp = 1,
+           pch="_", bty="n", cex=1, 
+           col = c("black","red","blue"))
+  }
+}
+dev.off()
+
 ```
 
 # Piecewise sem lm
@@ -1195,13 +1011,13 @@ for(i in 1:length(taxa)){
   
   cat("Running models for", taxa[i])
   
-  model.FD <- lme(FD ~ 
-                   Div+
-                   Age+
-                   Prod+
-                   Stab,
-                 data = dataset.group[[i]], 
-                 na.action=na.fail)
+  model.FD <- lm(FD ~ 
+                    Div+
+                    Age+
+                    Prod+
+                    Stab,
+                  data = dataset.group[[i]], 
+                  na.action=na.fail)
   
   model.div <- lm(Div ~ 
                     Stab+
@@ -1234,88 +1050,99 @@ for(i in 1:length(taxa)){
 ```{r echo=F, eval=FALSE}
 options(na.action("na.omit"))
 
-cl <- makeCluster(10)
-registerDoParallel(cl)
+start_time <- Sys.time()
+
+# ncores <- detectCores()
+# cl <- makeCluster(ncores)
+# registerDoParallel(cl)
 
 sar.sem <- list()
+# sar.sem <-  foreach(i=1:length(taxa),
+#                     .packages=c('spdep','spatialreg','piecewiseSEM')) %dopar% {
 
-# sar.sem <-  foreach(i=1:length(taxa), 
-#                     .packages=c('spdep','piecewiseSEM')) %dopar% {
-     
-    for(i in 1:length(taxa)){    cat("\r",taxa[i])
-    
-    data.tmp <- dataset.group[[i]]
-    neigh <- nlw[[i]]
-    
-    cat("\r",taxa[i], "FD_model")
-    model.FD <- errorsarlm(FD ~ 
-                             Div+
-                             Age+
-                             Prod+
-                             Stab,
-                           data = data.tmp, 
-                           listw = neigh)
-    
-    cat("\r",taxa[i], "Div_model")
-    model.div <- errorsarlm(Div ~ 
-                              Stab+
-                              Prod,
-                            data = data.tmp,
-                            listw = neigh)
-    
-    cat("\r",taxa[i], "Div2_model")
-    model.div2 <- errorsarlm(Div ~ 
-                               Stab+
-                               Prod+
-                               Age,
-                             data = data.tmp,
-                             listw = neigh)
-    
-    cat("\r",taxa[i], "Age_model")
-    model.age <- errorsarlm(Age ~ 
-                              Stab+
-                              Prod,
-                            data = data.tmp,
-                            listw = neigh)
-    
-    cat("\r",taxa[i], "SEM_model")
-    sem.sar.tmp <- psem(
-      model.FD,      
-      model.div,      
-      model.age)
-    
-    cat("\r",taxa[i], "SEM2_model")
-    sem.sar.tmp2 <- psem(
-      model.FD,
-      model.div2,
-      model.age)
-    
-    models.sarsem <- list(model1 = list(summary=list(),
+for(i in 1:length(taxa)){    cat("\r",taxa[i])
+  
+  data.tmp <- dataset.group[[i]]
+  neigh <- nlw[[i]]
+  
+  model.age <- spatialreg::errorsarlm(Age ~ 
+                                        Stab,
+                                      data = data.tmp,
+                                      listw = neigh)
+  
+  model.div <- spatialreg::errorsarlm(Div ~ 
+                                        Age+
+                                        Stab,
+                                      data = data.tmp,
+                                      listw = neigh)
+  
+  model.div2 <- spatialreg::errorsarlm(Div ~ 
+                                         Age+
+                                         Stab+
+                                         Prod,
+                                       data = data.tmp,
+                                       listw = neigh)
+  
+  model.FD <- spatialreg::errorsarlm(FD ~ 
+                                       Div+
+                                       Age+
+                                       Stab+
+                                       Prod,
+                                     data = data.tmp,
+                                     listw = neigh)
+  
+  cat("\r",taxa[i], "SEM_model")
+  
+  sem.sar.tmp <- psem(
+    model.FD,
+    model.div,
+    model.age)
+  
+  cat("\r",taxa[i], "SEM2_model")
+  sem.sar.tmp2 <- psem(
+    model.FD,
+    model.div2,
+    model.age)
+  
+  models.sarsem <- list(model1 = list(summary=list(),
                                         residuals=list()), 
                           model2 = list(list(summary=list(),
                                         residuals=list())))
-    
-    models.sarsem$model1$summary <- lapply(list(model.FD,
-                                                  model.div,
-                                                  model.age), 
-                                           function(x)
-                                             summary(x, Nagelkerke=T))
-    models.sarsem$model1$residuals <- residuals(sem.sar.tmp)
-    
-    models.sarsem$model2$summary <- lapply(list(model.FD,
-                                                  model.div2,
-                                                  model.age), 
-                                           function(x)
-                                             summary(x, Nagelkerke=T))
-    models.sarsem$model2$residuals <- residuals(sem.sar.tmp2)
-    
-    # models.sarsem
-    sar.sem[[i]] <- models.sarsem
-    
-  }
+  
+  cat("\r",taxa[i], "SEM_model")
+  models.sarsem$model1$summary <- lapply(list(model.FD,
+                                              model.div,
+                                              model.age), 
+                                         function(x)
+                                           summary(x, Nagelkerke=T))
+  models.sarsem$model1$residuals <- residuals(sem.sar.tmp)
+  models.sarsem$model1$psem <- summary(sem.sar.tmp)
+  
+  cat("\r",taxa[i], "SEM_model 2")
+  models.sarsem$model2$summary <- lapply(list(model.FD,
+                                              model.div2,
+                                              model.age), 
+                                         function(x)
+                                           summary(x, Nagelkerke=T))
+  models.sarsem$model2$residuals <- residuals(sem.sar.tmp2)
+  models.sarsem$model2$psem <- summary(sem.sar.tmp2)
+  
+  # models.sarsem
+  sar.sem[[i]] <- models.sarsem
+  
+}
+
 
 # stop the cluster
 stopCluster(cl)
+
+end_time <- Sys.time()
+end_time-start_time
+# Takes 10 hours
+
+names(sar.sem) <- taxa
+
+# saveRDS(sar.sem, "sarsem.rds")
 
 ```
 
@@ -1327,39 +1154,23 @@ sarsem_model2  <- list()
 
 for(i in 1:length(taxa)){
   
-  sarsem_model1[[1]] <- rbind(data.frame(Y = "FD", 
-                                    Pred = rownames(sar.sem[[i]]$model1$summary[[1]]$Coef[-1,]),
-                                    round(sar.sem[[i]]$model1$summary[[1]]$Coef[-1,],2)),
-                         data.frame(Y = "Div", 
-                                    Pred = rownames(sar.sem[[i]]$model1$summary[[2]]$Coef[-1,]),
-                                    round(sar.sem[[i]]$model1$summary[[2]]$Coef[-1,],2)),
-                         data.frame(Y = "Age", 
-                                    Pred = rownames(sar.sem[[i]]$model1$summary[[3]]$Coef[-1,]),
-                                    round(sar.sem[[i]]$model1$summary[[3]]$Coef[-1,],2)))
+  sarsem_model1[[1]] <- sar.sem[[i]]$model1$psem$coefficients
   
   sarsem_model1[[2]] <- rbind(data.frame(Y = "FD", 
-                                         R2 = round(sar.sem[[i]]$model1$summary[[1]]$NK,2)),
+                                         R2 = round(summary(sar.models[[i]]$FD, Nagelkerke = T)$NK,2)),
                               data.frame(Y = "Div",  
-                                         R2 = round(sar.sem[[i]]$model1$summary[[2]]$NK,2)),
+                                         R2 = round(summary(sar.models[[i]]$div, Nagelkerke = T)$NK,2)),
                               data.frame(Y = "Age", 
-                                         R2 = round(sar.sem[[i]]$model1$summary[[3]]$NK,2)))
-    
-  sarsem_model2[[1]] <- rbind(data.frame(Y = "FD", 
-                                    Pred = rownames(sar.sem[[i]]$model2$summary[[1]]$Coef[-1,]),
-                                    round(sar.sem[[i]]$model2$summary[[1]]$Coef[-1,],2)),
-                         data.frame(Y = "Div", 
-                                    Pred = rownames(sar.sem[[i]]$model2$summary[[2]]$Coef[-1,]),
-                                    round(sar.sem[[i]]$model2$summary[[2]]$Coef[-1,],2)),
-                         data.frame(Y = "Age", 
-                                    Pred = rownames(sar.sem[[i]]$model2$summary[[3]]$Coef[-1,]),
-                                    round(sar.sem[[i]]$model2$summary[[3]]$Coef[-1,],2)))
+                                         R2 = round(summary(sar.models[[i]]$age, Nagelkerke = T)$NK,2)))
+  
+  sarsem_model2[[1]] <- sar.sem[[i]]$model2$psem$coefficients
   
   sarsem_model2[[2]] <- rbind(data.frame(Y = "FD", 
-                                         R2 = round(sar.sem[[i]]$model2$summary[[1]]$NK,2)),
+                                         R2 = round(summary(sar.models[[i]]$FD, Nagelkerke = T)$NK,2)),
                               data.frame(Y = "Div",  
-                                         R2 = round(sar.sem[[i]]$model2$summary[[2]]$NK,2)),
+                                         R2 = round(summary(sar.models[[i]]$div2, Nagelkerke = T)$NK,2)),
                               data.frame(Y = "Age", 
-                                         R2 = round(sar.sem[[i]]$model2$summary[[3]]$NK,2)))
+                                         R2 = round(summary(sar.models[[i]]$age, Nagelkerke = T)$NK,2)))
   
   sarsem_res[[i]] <- list(sarsem_model1, sarsem_model2)
   names(sarsem_res[[i]]) <- c("model1", "model2")
@@ -1381,265 +1192,34 @@ for(i in 1:length(taxa)){
   )
   
   edge_set  <- data.frame(
-    edge_from = sarsem_res[[i]]$model2[[1]]$Pred,
-    edge_to = sarsem_res[[i]]$model2[[1]]$Y,
-    style = ifelse(sarsem_res[[i]]$model2[[1]]$Pr...z..<.05,"solid","dashed"),
-    label = sarsem_res[[i]]$model2[[1]]$Estimate,
-    penwidth = abs(sarsem_res[[i]]$model2[[1]]$Estimate)*40
+    edge_from = sarsem_res[[i]]$model2[[1]]$Predictor,
+    edge_to = sarsem_res[[i]]$model2[[1]]$Response,
+    style = ifelse(sarsem_res[[i]]$model2[[1]]$P.Value<.05,"solid","dashed"),
+    label = round(sarsem_res[[i]]$model2[[1]]$Estimate,2),
+    penwidth = abs(sarsem_res[[i]]$model2[[1]]$Estimate)*20,
+    color = ifelse(sarsem_res[[i]]$model2[[1]]$Estimate<0,"red","blue")
   )
   
   # Combine edges and nodes
   my_graph <- graphviz_graph(
     nodes_df = node_set,
     edges_df = edge_set,
-    edge_attrs = c("arrowsize = .2"))
+    edge_attrs = c("arrowsize = .5"))
   
   # cat(my_graph$dot_code)
   
   graphviz_render(my_graph)
   
   graphviz_render(my_graph) %>%
-  export_svg %>% charToRaw %>% rsvg_pdf(paste("SEM_global_",taxa[i],".pdf",sep = ""))
+    export_svg %>% charToRaw %>% rsvg_pdf(paste("results/SEM_global_",taxa[i],".pdf",sep = ""))
 }
 
 
 ```
 
-## Run Regional SAR models
-```{r}
 
-sarsem.realm <- list()
-
-## Models by realm
-
-for(i in 1:length(taxa)){ 
-  cat("Taxa", taxa[i], '-', i, 'from', length(taxa))
-  
-  cl <- makeCluster(8)
-  registerDoParallel(cl)
-  
-  sar.models.realm <- 
-    foreach(j=1:NRealm, .packages=c('spdep','piecewiseSEM')) %dopar% { 
-      
-      # get regional dataset
-      datatmp <- na.omit(reg_dataset[[i]][[j]])
-      # Convert to SpatialPointsdataframe
-      coordinates(datatmp) <- ~x+y 
-      # define connectivity matrix (0/1)
-      nbdist<-dnearneigh(x=datatmp, d1=0, d2=5000) 
-      # compute the Euclidean distance between neighbouring sites
-      neigh.dist<-nbdists(nbdist, datatmp, longlat=F) 
-      
-      ## conditioned weighted matrix
-      if(Realms[j]=="Afrotropical"|
-         Realms[j]=="Sino-Japanese"|
-         Realms[j]=="Australian"|
-         Realms[j]=="Nearctic"|
-         Realms[j]=="Neotropical"|
-         Realms[j]=="Oriental"|
-         Realms[j]=="Palearctic"){
-        inverse<-lapply(neigh.dist, function(x) (1/(x^4)))
-      }
-      if(Realms[j]=="Madagascan"|
-         Realms[j]=="Oceanina"|
-         Realms[j]=="Panamanian"|
-         Realms[j]=="Saharo-Arabian"){
-        inverse<-lapply(neigh.dist, function(x) (1/(x^2)))
-      }
-      # coding style W 
-      nlw2<-nb2listw(neighbours=nbdist, 
-                     glist=inverse, 
-                     style="W", 
-                     zero.policy=FALSE) 
-      
-      model.FD <- errorsarlm(FD ~ 
-                               Div+
-                               Age+
-                               Prod+
-                               Stab,
-                             data = datatmp, 
-                             listw=nlw2, 
-                             zero.policy = T)
-      
-      model.div <- errorsarlm(Div ~ 
-                                Stab+
-                                Prod,
-                              data = datatmp, 
-                              listw=nlw2, 
-                              zero.policy = T)
-      
-      model.div2 <- errorsarlm(Div ~ 
-                                 Stab+
-                                 Prod+
-                                 Age,
-                               data = datatmp, 
-                               listw=nlw2, 
-                               zero.policy = T)
-      
-      model.age <- errorsarlm(Age ~ 
-                                Stab+
-                                Prod,
-                              data = datatmp,
-                              listw=nlw2, 
-                              zero.policy = T)
-      
-      sem.sar.tmp <- list(model.FD,
-                          model.div,
-                          model.age)
-      
-      sem.sar.tmp2 <- list(model.FD,
-                          model.div2,
-                          model.age)
-      
-      models.sarsem <- list(model1 = list(summary=list(),
-                                          residuals=list()), 
-                            model2 = list(list(summary=list(),
-                                               residuals=list())))
-      
-      models.sarsem$model1$summary <- lapply(sem.sar.tmp, 
-                                             function(x)
-                                               summary(x, Nagelkerke=T))
-      models.sarsem$model1$residuals <- lapply(sem.sar.tmp, 
-                                             residuals)
-      
-      models.sarsem$model2$summary <- lapply(sem.sar.tmp2, 
-                                             function(x)
-                                               summary(x, Nagelkerke=T))
-      models.sarsem$model2$residuals <- lapply(sem.sar.tmp2, 
-                                             residuals)
-      
-      models.sarsem
-      
-    }
-  # stop the cluster
-  stopCluster(cl)
-  
-  sarsem.realm[[i]] <- sar.models.realm
-}
-
-names(sarsem.realm) <- taxa
-
-
-```
-
-
-### Get results from regional models
-```{r echo=F, eval=FALSE}
-sarsem_res_reg_tmp <- list()
-sarsem_res_reg <- list()
-sarsem_model1_reg  <- list()
-sarsem_model2_reg  <- list()
-
-for(i in 1:length(taxa)){
-  
-  for(j in 1:NRealm){
-    
-    sarsem_model1_reg[[1]] <- rbind(data.frame(Y = "FD", 
-                                               Pred = rownames(sarsem.realm[[i]][[j]]$model1$summary[[1]]$Coef[-1,]),
-                                               round(sarsem.realm[[i]][[j]]$model1$summary[[1]]$Coef[-1,],2)),
-                                    data.frame(Y = "Div", 
-                                               Pred = rownames(sarsem.realm[[i]][[j]]$model1$summary[[2]]$Coef[-1,]),
-                                               round(sarsem.realm[[i]][[j]]$model1$summary[[2]]$Coef[-1,],2)),
-                                    data.frame(Y = "Age", 
-                                               Pred = rownames(sarsem.realm[[i]][[j]]$model1$summary[[3]]$Coef[-1,]),
-                                               round(sarsem.realm[[i]][[j]]$model1$summary[[3]]$Coef[-1,],2)))
-    
-    sarsem_model1_reg[[2]] <- rbind(data.frame(Y = "FD", 
-                                               R2 = round(sarsem.realm[[i]][[j]]$model1$summary[[1]]$NK,2)),
-                                    data.frame(Y = "Div",  
-                                               R2 = round(sarsem.realm[[i]][[j]]$model1$summary[[2]]$NK,2)),
-                                    data.frame(Y = "Age", 
-                                               R2 = round(sarsem.realm[[i]][[j]]$model1$summary[[3]]$NK,2)))
-    
-    sarsem_model2_reg[[1]] <- rbind(data.frame(Y = "FD", 
-                                               Pred = rownames(sarsem.realm[[i]][[j]]$model2$summary[[1]]$Coef[-1,]),
-                                               round(sarsem.realm[[i]][[j]]$model2$summary[[1]]$Coef[-1,],2)),
-                                    data.frame(Y = "Div", 
-                                               Pred = rownames(sarsem.realm[[i]][[j]]$model2$summary[[2]]$Coef[-1,]),
-                                               round(sarsem.realm[[i]][[j]]$model2$summary[[2]]$Coef[-1,],2)),
-                                    data.frame(Y = "Age", 
-                                               Pred = rownames(sarsem.realm[[i]][[j]]$model2$summary[[3]]$Coef[-1,]),
-                                               round(sarsem.realm[[i]][[j]]$model2$summary[[3]]$Coef[-1,],2)))
-    
-    sarsem_model2_reg[[2]] <- rbind(data.frame(Y = "FD", 
-                                               R2 = round(sarsem.realm[[i]][[j]]$model2$summary[[1]]$NK,2)),
-                                    data.frame(Y = "Div",  
-                                               R2 = round(sarsem.realm[[i]][[j]]$model2$summary[[2]]$NK,2)),
-                                    data.frame(Y = "Age", 
-                                               R2 = round(sarsem.realm[[i]][[j]]$model2$summary[[3]]$NK,2)))
-    
-    sarsem_res_reg_tmp[[j]] <- list(sarsem_model1_reg, sarsem_model2_reg)
-    names(sarsem_res_reg_tmp[[j]]) <- c("model1", "model2")
-    
-  }
-  names(sarsem_res_reg_tmp) <- Realms
-  sarsem_res_reg[[i]] <- sarsem_res_reg_tmp
-}
-names(sarsem_res_reg) <- taxa
-
-# get dataframe
-sarsem_reg_table <- rbind(data.frame(taxa = "Amphibians", 
-                                     do.call("rbind",
-                                       lapply(sarsem_res_reg$amphibians, function(x) x$model1[[1]]))),
-                          data.frame(taxa = "Birds", 
-                                     do.call("rbind",
-                                       lapply(sarsem_res_reg$birds, function(x) x$model1[[1]]))),
-                          data.frame(taxa = "Mammals", 
-                                     do.call("rbind",
-                                       lapply(sarsem_res_reg$mammals, function(x) x$model1[[1]]))),
-                          data.frame(taxa = "Reptiles", 
-                                     do.call("rbind",
-                                       lapply(sarsem_res_reg$reptiles, function(x) x$model1[[1]]))))
-
-
-```
-
-### Plot regional SEMs
-```{r echo=F, eval=FALSE}
-# Transforming a model summary into a graph description
-# must use DiagrammeR v0.6
-
-for(i in 1:length(taxa)){
-  
-  for(j in 1:NRealm){
-    
-    node_set <- data.frame(
-      nodes = c("FD", "Age", "Div", "Prod", "Stab"),
-      shape = c("box", "box", "box", "box", "box")
-    )
-    
-    edge_set  <- data.frame(
-      edge_from = sarsem_res_reg[[i]][[j]]$model2[[1]]$Pred,
-      edge_to = sarsem_res_reg[[i]][[j]]$model2[[1]]$Y,
-      style = ifelse(sarsem_res_reg[[i]][[j]]$model2[[1]]$Estimate<0,"solid","dashed"),
-      color = ifelse(sarsem_res_reg[[i]][[j]]$model2[[1]]$Estimate<0,"red","black"), 
-      label = sarsem_res_reg[[i]][[j]]$model2[[1]]$Estimate,
-      penwidth = abs(sarsem_res_reg[[i]][[j]]$model2[[1]]$Estimate)*20
-    )
-    
-    # Combine edges and nodes
-    my_graph <- graphviz_graph(
-      nodes_df = node_set,
-      edges_df = edge_set,
-      edge_attrs = c("arrowsize = .2"))
-    
-    # cat(my_graph$dot_code)
-    
-    # graphviz_render(my_graph)
-    
-    graphviz_render(my_graph) %>%
-      export_svg %>% charToRaw %>% rsvg_pdf(paste("SEM_global_",taxa[i],"_",Realms[[j]],".pdf",sep = ""))
-  }
-}
-
-
-```
 
 # SAVE
 ```{r echo=F, eval=FALSE}
-save.image(paste(savedatafolder,"Code/FD_global_spatial_analyses.RData",sep=""))
-#save.image("FD_global_spatial_analyses.RData")
-
-#load(paste(savedatafolder,"Code/FD_global_spatial_analyses.RData",sep=""))
-#load("FD_global_spatial_analyses.RData")
+# save.image("FD_global_spatial_analyses.RData")
 ```

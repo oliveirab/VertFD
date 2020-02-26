@@ -56,7 +56,8 @@ mpd_b <- function(cophe_phyd, splist){
 # load function to calculate fdips in the loop
 source("fdisp_loop.R")
 
-
+# Function range between 0 and 1
+range01 <- function(x){(x-min(x))/(max(x)-min(x))}
 ```
 
 ## Land data
@@ -239,7 +240,15 @@ climate.stab.r <- projectRaster(climate.stab.r, crs=crs(mapa))
 climate.stab.r <- resample(climate.stab.r, r, method= "bilinear")
 climate.stab <- extract(climate.stab.r,XY,method='simple')
 
-rm(climate.stab.r)
+# Temperature stability over time metric
+temp.stab.r <- raster(paste(sep="",externHD,'#Environment/Climate_Stability_Hannah_Owens/tempStability.asc'))
+crs(temp.stab.r) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+temp.stab.r <- projectRaster(temp.stab.r, crs=crs(mapa))
+
+temp.stab.r <- resample(temp.stab.r, r, method= "bilinear")
+temp.stab <- extract(temp.stab.r,XY,method='simple')
+
+rm(climate.stab.r,temp.stab.r)
 ```
 
 ## Climate distance and novelty (Fitzpatrick et al. 2018)
@@ -280,6 +289,12 @@ precipnov.r <- resample(precipnov.r, r, method= "bilinear")
 precipnov <- extract(precipnov.r,XY,method='simple')
 
 rm(precipnov.r)
+
+# Climate distance
+climdist <- range01(tempdist) * range01(precipdist)
+
+# Climate novelty
+climnov <- range01(tempnov) * range01(precipnov)
 
 ```
 
@@ -357,79 +372,33 @@ rm(elevation)
 ```
 
 
-## Realms
-```{r get_realm, warning= F, eval=F}
-Reanames <- readShapePoly("G:/GIS/CMEC regions & realms/newRealms.shp")
-  crs(Reanames) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
-  extent(mapa) <- extent(Reanames)
-  Reanames<-data.frame(Reanames$Realm)
-  names(Reanames)<-'Realm'
-  Reanames<-cbind(Realms=rownames(Reanames),Reanames)
-  #2) Extract values
-  Realm <- readShapePoly("G:/GIS/CMEC regions & realms/newRealms.shp")
-  crs(Realm) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
-  realmnames<-sort(Realm$fullupgmar) # put alphabetic order because rasterize will put number in acordance with alphabetic order
-  extent(mapa) <- extent(Realm)
-  Realm <- rasterize(Realm,mapa,'fullupgmar')
-  Realm <- projectRaster(Realm, crs="+proj=cea +datum=WGS84")
-  Realm <- as.vector(raster::extract(Realm,XY,method='simple'))
-  
-  #Some cells comprise more than one Realm and the extract function give a medium value for that cell. 
-  #This value have no meaning as we need the value of the Realm for each cell.
-  check.integer <- function(N){ # function for check if number is integer
-    !length(grep("[^[:digit:]]", as.character(N)))
-  }
-  
-  for (i in seq_along(Realm)){ # put NA in non-integer numbers
-    if (check.integer(Realm[i]))
-    {Realm[i]<-Realm[i]
-    }else{Realm[i]<-NA}
-  }
-  
-  #Dont know why...but some codes come with whitespaces -To see use: unique(Realm)
-  trim <- function( x ) { #Function to remove whitespaces
-    gsub("(^[[:space:]]+|[[:space:]]+$)", "", x)
-  }
-  Realm<-trim(Realm)
-  
-  #Give names for Realm code...
-  Realm <- as.character(Reanames$Realm)[ match(Realm, c(1:11))]
-  
-  ### Solve problem with NAs between realms
-  Realm2 <- readShapePoly("G:/GIS/CMEC regions & realms/newRealms.shp")
-  crs(Realm2) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
-  Realm2 <- spTransform(Realm2, CRS("+proj=cea +datum=WGS84"))
-  XY <- SpatialPoints(XY)
-  crs(XY) <-"+proj=cea +datum=WGS84"
-  Realm2<-sp::over(XY,Realm2)
-  Realm2<-as.vector(Realm2$Realm)
-  
-  #Give names for NAs based on the previous 
-  Realm3<-NA
-  for(i in 1:length(Realm2)){
-    if(is.na(Realm[i])){
-      Realm3[i]<-Realm2[i]
-    }else{
-      Realm3[i]<-Realm[i]
-    } 
-  }
-  
-  Realm<-Realm3
-  rm(Realm2,Realm3)
-```
-
-
-## WWF Biomes
+## WWF Biomes $ Realm
 ```{r biomes}
-biome <- readShapePoly(paste(sep="",externHD,"WWF_biomas_ecoregions/wwf_terr_ecos.shp"))
-crs(biome) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
-biome <- spTransform(biome, crs(r))
-biome <- rasterize(biome,r,'BIOME')
-biome <- as.vector(extract(biome,XY,method='simple',fun=min(x)))
+WWF <- readShapePoly(paste(sep="",externHD,"WWF_biomas_ecoregions/wwf_terr_ecos.shp"))
+crs(WWF) <-"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+WWF <- spTransform(WWF, crs(r))
+WWF <- over(XY, WWF)
 
-biome<-gdata::trim(biome)
-biome<-round(as.numeric(biome),0)
+biome <- WWF$BIOME
 biome[which(biome>14)] <- NA
+# test
+plot(rasterFromXYZ(data.frame(XY,biome)))
+
+Realm <- as.character(WWF$REALM)
+# test
+as.numeric.factor <- function(x) {seq_along(levels(x))[x]}
+pp <- as.numeric.factor(as.factor(Realm))
+plot(rasterFromXYZ(data.frame(XY,pp)))
+
+# Fix Realm names
+Realm[which(Realm=="AA")] <- "Australasia"
+Realm[which(Realm=="AN")] <- "Antarctic"
+Realm[which(Realm=="AT")] <- "Afrotropics"
+Realm[which(Realm=="IM")] <- "IndoMalay"
+Realm[which(Realm=="NA")] <- "Nearctic"
+Realm[which(Realm=="NT")] <- "Neotropics"
+Realm[which(Realm=="OC")] <- "Oceania"
+Realm[which(Realm=="PA")] <- "Palearctic"
 
 # biomes names
 bionames <- c(
@@ -447,19 +416,20 @@ bionames <- c(
 "Mediterranean Forests, Woodlands & Scrub",
 "Deserts & Xeric Shrublands",
 "Mangroves")
+
 ```
 
-## Biorealm
+
+## BioRealm
 ```{r get_tree_density}
-Biorealm <- paste(Realm, biome,sep = "_")
+BioRealm <- paste(Realm, biome,sep = "_")
 ```
-
 
 ## Environmental variables
 ```{r env_vars}
-env.vars <- data.frame(velocity,climate.stab,tempnov,tempdist,veg,
-                       mean.temp,mean.prec,elev,terrain_indices,
-                       NPP,Realm,Biorealm,biome)
+env.vars <- data.frame(velocity,climate.stab,temp.stab,tempnov,tempdist,precipdist,precipnov,climdist,climnov,
+                       veg,mean.temp,mean.prec,elev,terrain_indices,NPP,
+                       Realm,Biorealm,REALM,biome)
 ```
 
 # COMMUNITY METRICS
@@ -548,16 +518,18 @@ com_metrics <- bind_rows(com_metrics)
 # COMMUNITY METRICS SES
 ```{r community_metrics, eval=F, message=FALSE}
 
-ses_MPD_realm<-ses_MPD_biome<-ses_MPD_biorealm<-rep(NA,Ncell)
+ses_MPD_realm<-ses_MPD_biome<-ses_MPD_biorealm<-
+  ses_DIV_eq_realm<-ses_DIV_eq_biome<-ses_DIV_eq_biorealm<-rep(NA,Ncell)
 
 for (i in 1:Ncell){
   cat("\r",i,"of", Ncell)
   
-  # SES MPD Realm
+  # SES Realm
   # we will be using the "richness" null model algorithm
   # the "independentswap" is more complicated
   if(is.na(Realm[i])){
   ses_MPD_realm[i] <- NA
+  ses_DIV_eq_realm[i] <- NA
   } 
   else {
     Realm.cells <- as.numeric(which(Realm==Realm[i])) # cells in the realm
@@ -566,17 +538,25 @@ for (i in 1:Ncell){
     sps.in.realm <- names(occr)[sps.in.realm]
     
     # randomly select from the total pool of species in the realm [sps.in.realm] the same number of species observed in that cell.
-    null.vals <- replicate(100, 
-                           mpd_b(cophe_tre, 
+    # for MPD
+    null.vals <- replicate(100,
+                           mpd_b(cophe_tre,
                                  sample(sps.in.realm,com_metrics$SPD[i])))
     ses_MPD_realm[i] <- (com_metrics$MPD_[i] - mean(null.vals))/sd(null.vals)
+
+    # for DR
+    null.vals <- replicate(100, 
+                           mean(1/subset(spp.ED_eq, 
+                            Species%in%sample(sps.in.realm,com_metrics$SPD[i]))[,2]))
+    ses_DIV_eq_realm[i] <- (com_metrics$DIV_eq[i] - mean(null.vals))/sd(null.vals)
   }
   
-  # SES MPD Biorealm
+  # SES Biorealm
   # we will be using the "richness" null model algorithm
   # the "independentswap" is more complicated
   if(is.na(Biorealm[i])){
   ses_MPD_biorealm[i] <- NA
+  ses_DIV_eq_biorealm[i] <- NA
   } 
   else {
     Biorealm.cells <- as.numeric(which(Biorealm==Biorealm[i])) # cells in the Biorealm
@@ -585,17 +565,25 @@ for (i in 1:Ncell){
     sps.in.Biorealm <- names(occr)[sps.in.Biorealm]
     
     # randomly select from the total pool of species in the Biorealm [sps.in.Biorealm] the same number of species observed in that cell.
-    null.vals <- replicate(100, 
+    # for MPD
+    null.vals <- replicate(100,
                            mpd_b(cophe_tre,
                                  sample(sps.in.Biorealm,com_metrics$SPD[i])))
     ses_MPD_biorealm[i] <- (com_metrics$MPD_[i] - mean(null.vals))/sd(null.vals)
+
+    # for DR
+    null.vals <- replicate(100, 
+                           mean(1/subset(spp.ED_eq, 
+                            Species%in%sample(sps.in.realm,com_metrics$SPD[i]))[,2]))
+    ses_DIV_eq_biorealm[i] <- (com_metrics$DIV_eq[i] - mean(null.vals))/sd(null.vals)
   }
   
-  # SES MPD biome
+  # SES biome
   # we will be using the "richness" null model algorithm
   # the "independentswap" is more complicated
   if(is.na(biome[i])){
   ses_MPD_biome[i] <- NA
+  ses_DIV_eq_biorealm[i] <- NA
   } 
   else {
     biome.cells <- as.numeric(which(biome==biome[i])) # cells in the biome
@@ -604,10 +592,17 @@ for (i in 1:Ncell){
     sps.in.biome <- names(occr)[sps.in.biome]
     
     # randomly select from the total pool of species in the biome [sps.in.biome] the same number of species observed in that cell.
-    null.vals <- replicate(100, 
-                           mpd_b(cophe_tre, 
+    # for MPD
+    null.vals <- replicate(100,
+                           mpd_b(cophe_tre,
                                  sample(sps.in.biome, com_metrics$SPD[i])))
     ses_MPD_biome[i] <- (com_metrics$MPD_[i] - mean(null.vals))/sd(null.vals)
+
+    # for DR
+    null.vals <- replicate(100, 
+                           mean(1/subset(spp.ED_eq, 
+                            Species%in%sample(sps.in.realm,com_metrics$SPD[i]))[,2]))
+    ses_DIV_eq_biome[i] <- (com_metrics$DIV_eq[i] - mean(null.vals))/sd(null.vals)
   }
 }
 
@@ -622,10 +617,11 @@ ses.MPD2 <- COM2[,"mpd.obs.z"]
 
 
 com_metrics_ses <- data.frame(ses.MPD,ses.MPD2,
-                              ses_MPD_realm,ses_MPD_biome,ses_MPD_biorealm)
-
+                              ses_MPD_realm,ses_MPD_biome,ses_MPD_biorealm,
+                              ses_DIV_eq_realm,ses_DIV_eq_biome,ses_DIV_eq_biorealm)
 
 gc()
+
 
 
 ```
@@ -720,7 +716,7 @@ FD.Biorealm.random <- foreach(i=1:Ncell, .combine='cbind', .packages=c('FD')) %d
   # SES FDis
   # we will be using the "richness" null model algorithm
   # the "independentswap" is more complicated
-  if(is.na(Biorealm[i])){
+  if(is.na(Realm[i])){
   c(rep(NA,100))
   } 
   else {
